@@ -1,3 +1,4 @@
+const validator = require('validator');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
@@ -73,20 +74,28 @@ exports.register = async (req, res, next) => {
  */
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    // "username" is accepted as an alias for the work email
+    const { password } = req.body;
+    const identifier = req.body.email || req.body.username;
 
     // Validate input
-    if (!email || !password) {
-      return ApiResponse.error(
-        res,
-        'Please provide both work email and password',
-        null,
-        400
-      );
+    const errors = [];
+    if (typeof identifier !== 'string' || !identifier.trim()) {
+      errors.push({ field: 'username', message: 'Username (work email) is required' });
+    } else if (!validator.isEmail(identifier.trim())) {
+      errors.push({ field: 'username', message: 'Username must be a valid work email address' });
+    }
+    if (typeof password !== 'string' || !password) {
+      errors.push({ field: 'password', message: 'Password is required' });
+    } else if (password.length < 6 || password.length > 128) {
+      errors.push({ field: 'password', message: 'Password must be between 6 and 128 characters' });
+    }
+    if (errors.length) {
+      return ApiResponse.error(res, 'Validation failed', errors, 400);
     }
 
     // Check for user and explicitly include password field
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    const user = await User.findOne({ email: identifier.toLowerCase().trim() }).select('+password');
 
     if (!user) {
       return ApiResponse.error(

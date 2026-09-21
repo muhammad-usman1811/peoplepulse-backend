@@ -53,14 +53,19 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['email', 'password'],
+                required: ['username', 'password'],
                 properties: {
-                  email: {
+                  username: {
                     type: 'string',
+                    format: 'email',
+                    description: 'Work email address (`email` is also accepted as the field name)',
                     example: 'admin@peoplepulse.com',
                   },
                   password: {
                     type: 'string',
+                    format: 'password',
+                    minLength: 6,
+                    maxLength: 128,
                     example: 'Password@123',
                   },
                 },
@@ -71,6 +76,12 @@ const swaggerDocument = {
         responses: {
           200: {
             description: 'Login successful. Returns JWT token and decrypted profile.',
+          },
+          400: {
+            description: 'Validation failed (missing/invalid username or password)',
+          },
+          403: {
+            description: 'Account deactivated',
           },
           401: {
             description: 'Invalid credentials',
