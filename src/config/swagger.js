@@ -11,6 +11,10 @@ const swaggerDocument = {
   },
   servers: [
     {
+      url: '/api',
+      description: 'Current host (works on Vercel and locally)',
+    },
+    {
       url: 'http://localhost:5000/api',
       description: 'Localhost Development Server',
     },
