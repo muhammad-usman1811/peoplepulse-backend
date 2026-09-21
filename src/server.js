@@ -21,7 +21,18 @@ connectDB();
 const app = express();
 
 // Security HTTP headers
-app.use(helmet());
+// The Swagger UI page loads its scripts/styles from cdn.jsdelivr.net (see /api-docs below)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'script-src': ["'self'", 'https://cdn.jsdelivr.net'],
+        'style-src': ["'self'", 'https:', "'unsafe-inline'"],
+      },
+    },
+  })
+);
 
 // Cross-Origin Resource Sharing (CORS) setup for React Web & Flutter Mobile
 const allowedOrigins = process.env.CLIENT_URL
