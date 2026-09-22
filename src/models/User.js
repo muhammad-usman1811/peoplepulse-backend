@@ -25,6 +25,17 @@ const UserSchema = new mongoose.Schema(
         'Please provide a valid corporate email address',
       ],
     },
+    employeeId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    phoneNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     password: {
       type: String,
       required: [true, 'Please provide a password'],
@@ -45,6 +56,21 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: 'Team Member',
       trim: true,
+    },
+    manager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    notificationPreferences: {
+      email: {
+        type: Boolean,
+        default: true,
+      },
+      push: {
+        type: Boolean,
+        default: true,
+      },
     },
     avatar: {
       type: String,
