@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+const validator = require('validator');
+>>>>>>> 60cba7b (login api)
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
@@ -73,6 +77,7 @@ exports.register = async (req, res, next) => {
  */
 exports.login = async (req, res, next) => {
   try {
+<<<<<<< HEAD
     const { email, password } = req.body;
 
     // Validate input
@@ -87,6 +92,30 @@ exports.login = async (req, res, next) => {
 
     // Check for user and explicitly include password field
     const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
+=======
+    // "username" is accepted as an alias for the work email
+    const { password } = req.body;
+    const identifier = req.body.email || req.body.username;
+
+    // Validate input
+    const errors = [];
+    if (typeof identifier !== 'string' || !identifier.trim()) {
+      errors.push({ field: 'username', message: 'Username (work email) is required' });
+    } else if (!validator.isEmail(identifier.trim())) {
+      errors.push({ field: 'username', message: 'Username must be a valid work email address' });
+    }
+    if (typeof password !== 'string' || !password) {
+      errors.push({ field: 'password', message: 'Password is required' });
+    } else if (password.length < 6 || password.length > 128) {
+      errors.push({ field: 'password', message: 'Password must be between 6 and 128 characters' });
+    }
+    if (errors.length) {
+      return ApiResponse.error(res, 'Validation failed', errors, 400);
+    }
+
+    // Check for user and explicitly include password field
+    const user = await User.findOne({ email: identifier.toLowerCase().trim() }).select('+password');
+>>>>>>> 60cba7b (login api)
 
     if (!user) {
       return ApiResponse.error(

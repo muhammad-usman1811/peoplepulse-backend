@@ -8,7 +8,12 @@ const connectDB = async () => {
     console.log(`[Database] MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
   } catch (error) {
     console.error(`[Database Error] Failed to connect to MongoDB: ${error.message}`);
+<<<<<<< HEAD
     process.exit(1);
+=======
+    // Serverless functions must not exit the process; requests will report the error instead
+    if (!process.env.VERCEL) process.exit(1);
+>>>>>>> 60cba7b (login api)
   }
 };
 
