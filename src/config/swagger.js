@@ -215,6 +215,111 @@ const swaggerDocument = {
         },
       },
     },
+    '/org/departments': {
+      get: {
+        summary: 'List Departments',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Departments retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      post: {
+        summary: 'Create Department',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string', example: 'Product Design' } },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Department created successfully' },
+          400: { description: 'Name is required' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can create departments' },
+          409: { description: 'Department name already exists' },
+        },
+      },
+    },
+    '/org/designations': {
+      get: {
+        summary: 'List Designations',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Designations retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      post: {
+        summary: 'Create Designation',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string', example: 'UX/UI Designer' } },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Designation created successfully' },
+          400: { description: 'Name is required' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can create designations' },
+          409: { description: 'Designation name already exists' },
+        },
+      },
+    },
+    '/org/locations': {
+      get: {
+        summary: 'List Locations',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Locations retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      post: {
+        summary: 'Create Location',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string', example: 'Islamabad Office' } },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Location created successfully' },
+          400: { description: 'Name is required' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can create locations' },
+          409: { description: 'Location name already exists' },
+        },
+      },
+    },
     '/auth/forgot-password': {
       post: {
         summary: 'Request Password Reset Link',

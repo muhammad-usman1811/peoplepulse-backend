@@ -259,6 +259,70 @@
           "path": ["auth", "register"]
         }
       }
+    },
+    {
+      "name": "12. List Departments",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/org/departments",
+          "host": ["{{baseUrl}}"],
+          "path": ["org", "departments"]
+        }
+      }
+    },
+    {
+      "name": "13. Create Department",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product Design\"\n}" },
+        "url": { "raw": "{{baseUrl}}/org/departments", "host": ["{{baseUrl}}"], "path": ["org", "departments"] }
+      }
+    },
+    {
+      "name": "14. List Designations",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/org/designations", "host": ["{{baseUrl}}"], "path": ["org", "designations"] }
+      }
+    },
+    {
+      "name": "15. Create Designation",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"UX/UI Designer\"\n}" },
+        "url": { "raw": "{{baseUrl}}/org/designations", "host": ["{{baseUrl}}"], "path": ["org", "designations"] }
+      }
+    },
+    {
+      "name": "16. List Locations",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/org/locations", "host": ["{{baseUrl}}"], "path": ["org", "locations"] }
+      }
+    },
+    {
+      "name": "17. Create Location",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Islamabad Office\"\n}" },
+        "url": { "raw": "{{baseUrl}}/org/locations", "host": ["{{baseUrl}}"], "path": ["org", "locations"] }
+      }
     }
   ]
 }
