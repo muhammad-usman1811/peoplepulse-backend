@@ -11,13 +11,10 @@ const swaggerDocument = {
   },
   servers: [
     {
-<<<<<<< HEAD
-=======
       url: '/api',
       description: 'Current host (works on Vercel and locally)',
     },
     {
->>>>>>> 60cba7b (login api)
       url: 'http://localhost:5000/api',
       description: 'Localhost Development Server',
     },
@@ -60,29 +57,19 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
-<<<<<<< HEAD
-                required: ['email', 'password'],
-                properties: {
-                  email: {
-                    type: 'string',
-=======
                 required: ['username', 'password'],
                 properties: {
                   username: {
                     type: 'string',
                     format: 'email',
                     description: 'Work email address (`email` is also accepted as the field name)',
->>>>>>> 60cba7b (login api)
                     example: 'admin@peoplepulse.com',
                   },
                   password: {
                     type: 'string',
-<<<<<<< HEAD
-=======
                     format: 'password',
                     minLength: 6,
                     maxLength: 128,
->>>>>>> 60cba7b (login api)
                     example: 'Password@123',
                   },
                 },
@@ -94,15 +81,12 @@ const swaggerDocument = {
           200: {
             description: 'Login successful. Returns JWT token and decrypted profile.',
           },
-<<<<<<< HEAD
-=======
           400: {
             description: 'Validation failed (missing/invalid username or password)',
           },
           403: {
             description: 'Account deactivated',
           },
->>>>>>> 60cba7b (login api)
           401: {
             description: 'Invalid credentials',
           },

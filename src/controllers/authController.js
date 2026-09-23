@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 const validator = require('validator');
->>>>>>> 60cba7b (login api)
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
@@ -77,22 +74,6 @@ exports.register = async (req, res, next) => {
  */
 exports.login = async (req, res, next) => {
   try {
-<<<<<<< HEAD
-    const { email, password } = req.body;
-
-    // Validate input
-    if (!email || !password) {
-      return ApiResponse.error(
-        res,
-        'Please provide both work email and password',
-        null,
-        400
-      );
-    }
-
-    // Check for user and explicitly include password field
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
-=======
     // "username" is accepted as an alias for the work email
     const { password } = req.body;
     const identifier = req.body.email || req.body.username;
@@ -115,7 +96,6 @@ exports.login = async (req, res, next) => {
 
     // Check for user and explicitly include password field
     const user = await User.findOne({ email: identifier.toLowerCase().trim() }).select('+password');
->>>>>>> 60cba7b (login api)
 
     if (!user) {
       return ApiResponse.error(

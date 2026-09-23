@@ -21,9 +21,6 @@ connectDB();
 const app = express();
 
 // Security HTTP headers
-<<<<<<< HEAD
-app.use(helmet());
-=======
 // The Swagger UI page loads its scripts/styles from cdn.jsdelivr.net (see /api-docs below)
 app.use(
   helmet({
@@ -36,7 +33,6 @@ app.use(
     },
   })
 );
->>>>>>> 60cba7b (login api)
 
 // Cross-Origin Resource Sharing (CORS) setup for React Web & Flutter Mobile
 const allowedOrigins = process.env.CLIENT_URL
@@ -70,9 +66,6 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // Swagger Interactive API Documentation UI
-<<<<<<< HEAD
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-=======
 // Assets load from a CDN because swagger-ui-express static files are not bundled on Vercel
 const SWAGGER_CDN = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5';
 app.use(
@@ -86,7 +79,6 @@ app.use(
     ],
   })
 );
->>>>>>> 60cba7b (login api)
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -120,23 +112,6 @@ app.use((req, res) => {
 // Centralized Error Handling Middleware
 app.use(errorHandler);
 
-<<<<<<< HEAD
-const PORT = process.env.PORT || 5000;
-
-const server = app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 PeoplePulse API Server running on port ${PORT}`);
-  console.log(`📱 Ready for Flutter Mobile & 💻 React Web Clients`);
-  console.log(`🔒 AES-256-GCM + Bcryptjs Security Active`);
-  console.log(`=======================================================`);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error(`Unhandled Rejection: ${err.message}`);
-  server.close(() => process.exit(1));
-});
-=======
 // Vercel imports the app as a serverless function; only listen when run directly
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
@@ -155,6 +130,5 @@ if (require.main === module) {
     server.close(() => process.exit(1));
   });
 }
->>>>>>> 60cba7b (login api)
 
 module.exports = app;
