@@ -2,6 +2,7 @@ const validator = require('validator');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
+const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
 
 /**
  * @desc    Register a new user
@@ -179,12 +180,39 @@ exports.forgotPassword = async (req, res, next) => {
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    // In a production app, nodemailer sends the reset link
     const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
 
+    if (isEmailConfigured()) {
+      try {
+        await sendResetPasswordEmail(user.email, resetUrl);
+      } catch (emailErr) {
+        // Roll back the token so the user isn't left with a dead-end reset
+        // link that was never delivered, and let them retry.
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save({ validateBeforeSave: false });
+        console.error(`[Email Error] Failed to send reset email: ${emailErr.message}`);
+        return ApiResponse.error(
+          res,
+          'Failed to send the password reset email. Please try again shortly.',
+          null,
+          502
+        );
+      }
+
+      return ApiResponse.success(
+        res,
+        'A password reset link has been sent to your work email address.',
+        { expiresInMinutes: 30 }
+      );
+    }
+
+    // Email isn't configured (EMAIL_USER/EMAIL_PASS missing) — fall back to
+    // returning the link directly so local/dev environments keep working.
+    console.warn('[Email Warning] EMAIL_USER/EMAIL_PASS not set; returning reset link in the response instead of emailing it.');
     return ApiResponse.success(
       res,
-      'Password reset link generated successfully',
+      'Password reset link generated successfully. (Email delivery is not configured — see server logs.)',
       {
         resetUrl,
         resetToken, // Returned for convenient frontend testing & integration

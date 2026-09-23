@@ -222,6 +222,191 @@ const swaggerDocument = {
         },
       },
     },
+    '/profile': {
+      get: {
+        summary: 'Get My Profile',
+        description: 'Returns the authenticated user\'s profile, including manager and notification preferences.',
+        tags: ['Profile'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Profile retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      put: {
+        summary: 'Update My Profile',
+        description:
+          'Any user may update their own name and phone number. Employee ID, department, designation and manager may only be changed by a superadmin, admin or hr user.',
+        tags: ['Profile'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', example: 'Alex Johnson' },
+                  phoneNumber: { type: 'string', example: '+1 555 0100' },
+                  employeeId: { type: 'string', example: 'EMP-1002', description: 'Admin-only' },
+                  department: { type: 'string', example: 'Engineering', description: 'Admin-only' },
+                  designation: { type: 'string', example: 'Software Engineer', description: 'Admin-only' },
+                  manager: { type: 'string', example: '650f1c2e...', description: 'Manager user ID, admin-only' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Profile updated successfully' },
+          400: { description: 'Invalid input' },
+          403: { description: 'Only an administrator can update employee ID, department, designation, or manager' },
+          409: { description: 'Employee ID already exists' },
+        },
+      },
+    },
+    '/profile/password': {
+      put: {
+        summary: 'Change My Password',
+        description: 'Change the authenticated user\'s password by providing their current password.',
+        tags: ['Profile'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['currentPassword', 'newPassword'],
+                properties: {
+                  currentPassword: { type: 'string', example: 'Password@123' },
+                  newPassword: { type: 'string', example: 'NewSecurePassword@456' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Password changed successfully' },
+          400: { description: 'Missing or too-short new password' },
+          401: { description: 'Current password is incorrect' },
+        },
+      },
+    },
+    '/profile/notifications': {
+      get: {
+        summary: 'Get My Notification Preferences',
+        tags: ['Profile'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Notification preferences retrieved successfully' },
+        },
+      },
+      put: {
+        summary: 'Update My Notification Preferences',
+        tags: ['Profile'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  email: { type: 'boolean', example: true },
+                  push: { type: 'boolean', example: false },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Notification preferences updated successfully' },
+          400: { description: 'Invalid input' },
+        },
+      },
+    },
+    '/org/departments': {
+      get: {
+        summary: 'List Departments',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Departments retrieved successfully' } },
+      },
+      post: {
+        summary: 'Create Department',
+        description: 'Requires superadmin, admin, or hr role.',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { type: 'object', required: ['name'], properties: { name: { type: 'string', example: 'Product Engineering' } } },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Department created successfully' },
+          403: { description: 'Not authorized' },
+          409: { description: 'Department name already exists' },
+        },
+      },
+    },
+    '/org/designations': {
+      get: {
+        summary: 'List Designations',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Designations retrieved successfully' } },
+      },
+      post: {
+        summary: 'Create Designation',
+        description: 'Requires superadmin, admin, or hr role.',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { type: 'object', required: ['name'], properties: { name: { type: 'string', example: 'Software Engineer' } } },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Designation created successfully' },
+          403: { description: 'Not authorized' },
+          409: { description: 'Designation name already exists' },
+        },
+      },
+    },
+    '/org/locations': {
+      get: {
+        summary: 'List Locations',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Locations retrieved successfully' } },
+      },
+      post: {
+        summary: 'Create Location',
+        description: 'Requires superadmin, admin, or hr role.',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { type: 'object', required: ['name'], properties: { name: { type: 'string', example: 'Karachi HQ' } } },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Location created successfully' },
+          403: { description: 'Not authorized' },
+          409: { description: 'Location name already exists' },
+        },
+      },
+    },
   },
 };
 
