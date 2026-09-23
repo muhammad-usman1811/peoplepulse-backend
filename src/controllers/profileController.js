@@ -42,10 +42,15 @@ exports.updateProfile = async (req, res, next) => {
   try {
     const { name, phoneNumber, employeeId, department, designation, manager } = req.body;
     const isAdmin = adminRoles.includes(req.user.role);
-    const updates = {};
+    const setUpdates = {};
+    // employeeId has a unique+sparse index: clearing it must $unset the field
+    // rather than $set it to undefined/null, both of which either get
+    // silently dropped by Mongoose or collide with other cleared users on
+    // the unique index.
+    const unsetUpdates = {};
 
-    if (name !== undefined) updates.name = name;
-    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+    if (name !== undefined) setUpdates.name = name;
+    if (phoneNumber !== undefined) setUpdates.phoneNumber = phoneNumber;
 
     if (employeeId !== undefined || department !== undefined || designation !== undefined || manager !== undefined) {
       if (!isAdmin) {
@@ -56,12 +61,18 @@ exports.updateProfile = async (req, res, next) => {
           403
         );
       }
-      if (employeeId !== undefined) updates.employeeId = employeeId || undefined;
-      if (department !== undefined) updates.department = department;
-      if (designation !== undefined) updates.designation = designation;
+      if (employeeId !== undefined) {
+        if (employeeId) {
+          setUpdates.employeeId = employeeId;
+        } else {
+          unsetUpdates.employeeId = '';
+        }
+      }
+      if (department !== undefined) setUpdates.department = department;
+      if (designation !== undefined) setUpdates.designation = designation;
       if (manager !== undefined) {
         if (manager === null || manager === '') {
-          updates.manager = null;
+          setUpdates.manager = null;
         } else if (!mongoose.isValidObjectId(manager)) {
           return ApiResponse.error(res, 'Manager must be a valid user ID', null, 400);
         } else if (String(manager) === String(req.user._id)) {
@@ -69,19 +80,25 @@ exports.updateProfile = async (req, res, next) => {
         } else if (!(await User.exists({ _id: manager, isActive: true }))) {
           return ApiResponse.error(res, 'Selected manager does not exist or is inactive', null, 400);
         } else {
-          updates.manager = manager;
+          setUpdates.manager = manager;
         }
       }
     }
 
-    if (updates.name !== undefined && (typeof updates.name !== 'string' || !updates.name.trim())) {
+    if (setUpdates.name !== undefined && (typeof setUpdates.name !== 'string' || !setUpdates.name.trim())) {
       return ApiResponse.error(res, 'Name cannot be empty', null, 400);
     }
 
-    await User.findByIdAndUpdate(req.user._id, updates, {
-      new: true,
-      runValidators: true,
-    });
+    const updateDoc = {};
+    if (Object.keys(setUpdates).length) updateDoc.$set = setUpdates;
+    if (Object.keys(unsetUpdates).length) updateDoc.$unset = unsetUpdates;
+
+    if (Object.keys(updateDoc).length) {
+      await User.findByIdAndUpdate(req.user._id, updateDoc, {
+        new: true,
+        runValidators: true,
+      });
+    }
 
     const user = await loadProfile(req.user._id);
     return ApiResponse.success(res, 'Profile updated successfully', {

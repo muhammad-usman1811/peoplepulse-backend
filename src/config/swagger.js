@@ -114,7 +114,9 @@ const swaggerDocument = {
       post: {
         summary: 'Request Password Reset Link',
         description:
-          'Sends a password reset token if work email exists in the database.',
+          'If the work email exists, a reset link is emailed to it when EMAIL_USER/EMAIL_PASS are configured on the server. ' +
+          'Otherwise (e.g. local development), the link and token are returned directly in the response instead of being emailed. ' +
+          'Always returns a generic success message for an unknown email, to avoid revealing which addresses are registered.',
         tags: ['Authentication'],
         requestBody: {
           required: true,
@@ -135,7 +137,14 @@ const swaggerDocument = {
         },
         responses: {
           200: {
-            description: 'Password reset link and token generated',
+            description:
+              'Either "reset link emailed" (no data) or, when email delivery is not configured, "link generated" with resetUrl/resetToken/expiresInMinutes in data.',
+          },
+          400: {
+            description: 'Email address missing from request body',
+          },
+          502: {
+            description: 'Email delivery is configured but sending the reset email failed',
           },
         },
       },
