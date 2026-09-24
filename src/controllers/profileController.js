@@ -56,7 +56,15 @@ exports.updateProfile = async (req, res, next) => {
           403
         );
       }
-      if (employeeId !== undefined) updates.employeeId = employeeId || undefined;
+      if (employeeId !== undefined) {
+        const normalizedEmployeeId = typeof employeeId === 'string' ? employeeId.trim() : employeeId;
+
+        if (normalizedEmployeeId === null || normalizedEmployeeId === '' || normalizedEmployeeId === undefined) {
+          updates.$unset = { ...updates.$unset, employeeId: 1 };
+        } else {
+          updates.employeeId = normalizedEmployeeId;
+        }
+      }
       if (department !== undefined) updates.department = department;
       if (designation !== undefined) updates.designation = designation;
       if (manager !== undefined) {

@@ -250,6 +250,57 @@ const swaggerDocument = {
         },
       },
     },
+    '/org/departments/{id}': {
+      get: {
+        summary: 'Get Department By ID',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Department retrieved successfully' },
+          404: { description: 'Department not found' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      put: {
+        summary: 'Update Department',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string', example: 'Product Design' } },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Department updated successfully' },
+          400: { description: 'Name is required' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can update departments' },
+          404: { description: 'Department not found' },
+          409: { description: 'Department name already exists' },
+        },
+      },
+      delete: {
+        summary: 'Delete Department',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Department deleted successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can delete departments' },
+          404: { description: 'Department not found' },
+        },
+      },
+    },
     '/org/designations': {
       get: {
         summary: 'List Designations',
@@ -285,6 +336,57 @@ const swaggerDocument = {
         },
       },
     },
+    '/org/designations/{id}': {
+      get: {
+        summary: 'Get Designation By ID',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Designation retrieved successfully' },
+          404: { description: 'Designation not found' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      put: {
+        summary: 'Update Designation',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string', example: 'UX/UI Designer' } },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Designation updated successfully' },
+          400: { description: 'Name is required' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can update designations' },
+          404: { description: 'Designation not found' },
+          409: { description: 'Designation name already exists' },
+        },
+      },
+      delete: {
+        summary: 'Delete Designation',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Designation deleted successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can delete designations' },
+          404: { description: 'Designation not found' },
+        },
+      },
+    },
     '/org/locations': {
       get: {
         summary: 'List Locations',
@@ -317,6 +419,57 @@ const swaggerDocument = {
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'Only admin, HR, or superadmin can create locations' },
           409: { description: 'Location name already exists' },
+        },
+      },
+    },
+    '/org/locations/{id}': {
+      get: {
+        summary: 'Get Location By ID',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Location retrieved successfully' },
+          404: { description: 'Location not found' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+      put: {
+        summary: 'Update Location',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string', example: 'Islamabad Office' } },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Location updated successfully' },
+          400: { description: 'Name is required' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can update locations' },
+          404: { description: 'Location not found' },
+          409: { description: 'Location name already exists' },
+        },
+      },
+      delete: {
+        summary: 'Delete Location',
+        tags: ['Organization'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Location deleted successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can delete locations' },
+          404: { description: 'Location not found' },
         },
       },
     },

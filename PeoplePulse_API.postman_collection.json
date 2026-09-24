@@ -262,13 +262,15 @@
     },
     {
       "name": "12. List Departments",
+      "description": "Supports simple text filtering. Example: {{baseUrl}}/org/departments?name=Product or ?location=Lahore",
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
         "url": {
-          "raw": "{{baseUrl}}/org/departments",
+          "raw": "{{baseUrl}}/org/departments?location=Lahore",
           "host": ["{{baseUrl}}"],
-          "path": ["org", "departments"]
+          "path": ["org", "departments"],
+          "query": [{ "key": "location", "value": "Lahore" }]
         }
       }
     },
@@ -286,10 +288,11 @@
     },
     {
       "name": "14. List Designations",
+      "description": "Supports simple text filtering. Example: {{baseUrl}}/org/designations?name=Designer or ?location=Lahore",
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
-        "url": { "raw": "{{baseUrl}}/org/designations", "host": ["{{baseUrl}}"], "path": ["org", "designations"] }
+        "url": { "raw": "{{baseUrl}}/org/designations?name=Designer", "host": ["{{baseUrl}}"], "path": ["org", "designations"], "query": [{ "key": "name", "value": "Designer" }] }
       }
     },
     {
@@ -306,10 +309,11 @@
     },
     {
       "name": "16. List Locations",
+      "description": "Supports simple text filtering. Example: {{baseUrl}}/org/locations?location=Lahore or ?name=Office",
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
-        "url": { "raw": "{{baseUrl}}/org/locations", "host": ["{{baseUrl}}"], "path": ["org", "locations"] }
+        "url": { "raw": "{{baseUrl}}/org/locations?location=Lahore", "host": ["{{baseUrl}}"], "path": ["org", "locations"], "query": [{ "key": "location", "value": "Lahore" }] }
       }
     },
     {
