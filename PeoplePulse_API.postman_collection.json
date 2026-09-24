@@ -84,7 +84,121 @@
       }
     },
     {
-      "name": "4. Forgot Password",
+      "name": "4. Get Complete Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile"]
+        }
+      }
+    },
+    {
+      "name": "5. Update Profile",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Ayesha Khan\",\n  \"phoneNumber\": \"+92 300 1234567\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile"]
+        }
+      }
+    },
+    {
+      "name": "6. Change Password",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentPassword\": \"Password@123\",\n  \"newPassword\": \"NewPassword@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/password",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "password"]
+        }
+      }
+    },
+    {
+      "name": "7. Get Notification Preferences",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/notifications",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "notifications"]
+        }
+      }
+    },
+    {
+      "name": "8. Update Notification Preferences",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": true,\n  \"push\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/notifications",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "notifications"]
+        }
+      }
+    },
+    {
+      "name": "9. Forgot Password",
       "request": {
         "method": "POST",
         "header": [
@@ -105,7 +219,7 @@
       }
     },
     {
-      "name": "5. Reset Password",
+      "name": "10. Reset Password",
       "request": {
         "method": "PUT",
         "header": [
@@ -126,7 +240,7 @@
       }
     },
     {
-      "name": "6. Register New User",
+      "name": "11. Register New User",
       "request": {
         "method": "POST",
         "header": [
@@ -144,6 +258,74 @@
           "host": ["{{baseUrl}}"],
           "path": ["auth", "register"]
         }
+      }
+    },
+    {
+      "name": "12. List Departments",
+      "description": "Supports simple text filtering. Example: {{baseUrl}}/org/departments?name=Product or ?location=Lahore",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/org/departments?location=Lahore",
+          "host": ["{{baseUrl}}"],
+          "path": ["org", "departments"],
+          "query": [{ "key": "location", "value": "Lahore" }]
+        }
+      }
+    },
+    {
+      "name": "13. Create Department",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product Design\"\n}" },
+        "url": { "raw": "{{baseUrl}}/org/departments", "host": ["{{baseUrl}}"], "path": ["org", "departments"] }
+      }
+    },
+    {
+      "name": "14. List Designations",
+      "description": "Supports simple text filtering. Example: {{baseUrl}}/org/designations?name=Designer or ?location=Lahore",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/org/designations?name=Designer", "host": ["{{baseUrl}}"], "path": ["org", "designations"], "query": [{ "key": "name", "value": "Designer" }] }
+      }
+    },
+    {
+      "name": "15. Create Designation",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"UX/UI Designer\"\n}" },
+        "url": { "raw": "{{baseUrl}}/org/designations", "host": ["{{baseUrl}}"], "path": ["org", "designations"] }
+      }
+    },
+    {
+      "name": "16. List Locations",
+      "description": "Supports simple text filtering. Example: {{baseUrl}}/org/locations?location=Lahore or ?name=Office",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/org/locations?location=Lahore", "host": ["{{baseUrl}}"], "path": ["org", "locations"], "query": [{ "key": "location", "value": "Lahore" }] }
+      }
+    },
+    {
+      "name": "17. Create Location",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Islamabad Office\"\n}" },
+        "url": { "raw": "{{baseUrl}}/org/locations", "host": ["{{baseUrl}}"], "path": ["org", "locations"] }
       }
     }
   ]

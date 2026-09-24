@@ -21,6 +21,8 @@ const seedUsers = async () => {
       email: 'admin@peoplepulse.com',
       password: 'Password@123',
       role: 'superadmin',
+      employeeId: 'EMP-1000',
+      phoneNumber: '+92 300 0000000',
       department: 'Executive HR',
       designation: 'Chief HR Officer',
     });
@@ -31,8 +33,11 @@ const seedUsers = async () => {
       email: 'sarah.connor@peoplepulse.com',
       password: 'Password@123',
       role: 'employee',
+      employeeId: 'EMP-1001',
+      phoneNumber: '+92 300 1234567',
       department: 'Engineering',
       designation: 'Senior Mobile Engineer',
+      manager: superAdmin._id,
     });
 
     console.log('-------------------------------------------------------');
