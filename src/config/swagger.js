@@ -236,7 +236,10 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['name'],
-                properties: { name: { type: 'string', example: 'Product Design' } },
+                properties: {
+                  name: { type: 'string', example: 'Product Design' },
+                  location: { type: 'string', example: 'Lahore', nullable: true },
+                },
               },
             },
           },
@@ -274,7 +277,10 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['name'],
-                properties: { name: { type: 'string', example: 'Product Design' } },
+                properties: {
+                  name: { type: 'string', example: 'Product Design' },
+                  location: { type: 'string', example: 'Lahore', nullable: true },
+                },
               },
             },
           },
@@ -470,6 +476,66 @@ const swaggerDocument = {
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'Only admin, HR, or superadmin can delete locations' },
           404: { description: 'Location not found' },
+        },
+      },
+    },
+    '/attendance/clock-in': {
+      post: {
+        summary: 'Clock In for Today',
+        description: 'Creates or updates the employee today attendance record with the current clock-in time.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          201: { description: 'Clock-in successful' },
+          400: { description: 'Invalid request or attendance already processed' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          409: { description: 'Already clocked in or already clocked out for today' },
+        },
+      },
+    },
+    '/attendance/clock-out': {
+      post: {
+        summary: 'Clock Out for Today',
+        description: 'Marks the employee attendance record with the current clock-out time.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Clock-out successful' },
+          400: { description: 'No attendance found for today or not clocked in yet' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          409: { description: 'Already clocked out for today' },
+        },
+      },
+    },
+    '/attendance/me': {
+      get: {
+        summary: 'Get My Attendance History',
+        description: 'Returns the authenticated employee attendance history for recent dates, optionally filtered by from/to query params.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            in: 'query',
+            name: 'from',
+            schema: { type: 'string', format: 'date' },
+            description: 'Start date filter (YYYY-MM-DD)',
+          },
+          {
+            in: 'query',
+            name: 'to',
+            schema: { type: 'string', format: 'date' },
+            description: 'End date filter (YYYY-MM-DD)',
+          },
+          {
+            in: 'query',
+            name: 'limit',
+            schema: { type: 'integer', default: 30 },
+            description: 'Maximum records to return',
+          },
+        ],
+        responses: {
+          200: { description: 'Attendance history retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
         },
       },
     },
