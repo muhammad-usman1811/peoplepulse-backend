@@ -539,6 +539,60 @@ const swaggerDocument = {
         },
       },
     },
+    '/employees': {
+      get: {
+        summary: 'List Employees',
+        tags: ['Employees'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 10 } },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'department', in: 'query', schema: { type: 'string' } },
+          { name: 'location', in: 'query', schema: { type: 'string' } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'on-leave'] } },
+          { name: 'isActive', in: 'query', schema: { type: 'boolean' } },
+        ],
+      },
+      post: {
+        summary: 'Create Employee',
+        tags: ['Employees'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object', required: ['name', 'email', 'password'],
+            properties: {
+              name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email' },
+              password: { type: 'string', minLength: 6 }, employeeId: { type: 'string' },
+              department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
+              status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
+            },
+          } } },
+        },
+        responses: { 201: { description: 'Employee created successfully' }, 403: { description: 'HR/Admin role required' } },
+      },
+    },
+    '/employees/{id}': {
+      get: {
+        summary: 'Get Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Employee retrieved successfully' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' } },
+      },
+      put: {
+        summary: 'Update Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: {
+          type: 'object', properties: { department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, isActive: { type: 'boolean' } },
+        } } } },
+        responses: { 200: { description: 'Employee updated successfully' }, 403: { description: 'HR/Admin role required' } },
+      },
+      delete: {
+        summary: 'Deactivate Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Employee deactivated successfully' }, 403: { description: 'HR/Admin role required' } },
+      },
+    },
     '/auth/forgot-password': {
       post: {
         summary: 'Request Password Reset Link',
@@ -622,6 +676,31 @@ const swaggerDocument = {
         },
       },
     },
+    '/auth/reset-password': {
+      post: {
+        summary: 'Reset Password Using Token in Request Body',
+        tags: ['Authentication'],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token', 'password'],
+                properties: {
+                  token: { type: 'string' },
+                  password: { type: 'string', minLength: 6, example: 'NewSecurePassword@123' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Password reset successful' },
+          400: { description: 'Invalid or expired reset token' },
+        },
+      },
+    },
     '/auth/register': {
       post: {
         summary: 'Register New Corporate User',
@@ -638,11 +717,6 @@ const swaggerDocument = {
                   name: { type: 'string', example: 'Alex Johnson' },
                   email: { type: 'string', example: 'alex.johnson@peoplepulse.com' },
                   password: { type: 'string', example: 'Password@123' },
-                  role: {
-                    type: 'string',
-                    enum: ['superadmin', 'admin', 'hr', 'employee'],
-                    example: 'employee',
-                  },
                   department: { type: 'string', example: 'Product Engineering' },
                   designation: { type: 'string', example: 'Software Engineer' },
                 },

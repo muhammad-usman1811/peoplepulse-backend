@@ -2,7 +2,6 @@ const validator = require('validator');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
-const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
 
 /**
  * @desc    Register a new user
@@ -11,7 +10,7 @@ const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmai
  */
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password, role, department, designation } = req.body;
+    const { name, email, password, department, designation } = req.body;
 
     // Validate presence
     if (!name || !email || !password) {
@@ -39,7 +38,7 @@ exports.register = async (req, res, next) => {
       name,
       email,
       password,
-      role: role || 'employee',
+      role: 'employee',
       department: department || 'General',
       designation: designation || 'Team Member',
     });
@@ -180,44 +179,26 @@ exports.forgotPassword = async (req, res, next) => {
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
+    const resetUrl = `${process.env.APP_URL || `${req.protocol}://${req.get('host')}`}/reset-password.html?token=${resetToken}`;
 
-    if (isEmailConfigured()) {
-      try {
-        await sendResetPasswordEmail(user.email, resetUrl);
-      } catch (emailErr) {
-        // Roll back the token so the user isn't left with a dead-end reset
-        // link that was never delivered, and let them retry.
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpire = undefined;
-        await user.save({ validateBeforeSave: false });
-        console.error(`[Email Error] Failed to send reset email: ${emailErr.message}`);
-        return ApiResponse.error(
-          res,
-          'Failed to send the password reset email. Please try again shortly.',
-          null,
-          502
-        );
-      }
-
-      return ApiResponse.success(
-        res,
-        'A password reset link has been sent to your work email address.',
-        { expiresInMinutes: 30 }
-      );
+    try {
+      const { sendResetPasswordEmail } = require('../../utils/sendEmail');
+      await sendResetPasswordEmail(user.email, resetUrl);
+    } catch (emailError) {
+      // Do not expose account existence or fail the reset flow because SMTP is unavailable.
+      console.error('[Email] Password reset email could not be sent:', emailError.message);
     }
 
-    // Email isn't configured (EMAIL_USER/EMAIL_PASS missing) — fall back to
-    // returning the link directly so local/dev environments keep working.
-    console.warn('[Email Warning] EMAIL_USER/EMAIL_PASS not set; returning reset link in the response instead of emailing it.');
+    const responseData = { expiresInMinutes: 30 };
+    if (process.env.NODE_ENV !== 'production') {
+      responseData.resetUrl = resetUrl;
+      responseData.resetToken = resetToken;
+    }
+
     return ApiResponse.success(
       res,
-      'Password reset link generated successfully. (Email delivery is not configured — see server logs.)',
-      {
-        resetUrl,
-        resetToken, // Returned for convenient frontend testing & integration
-        expiresInMinutes: 30,
-      }
+      'Password reset link generated successfully',
+      responseData
     );
   } catch (err) {
     next(err);
@@ -231,9 +212,13 @@ exports.forgotPassword = async (req, res, next) => {
  */
 exports.resetPassword = async (req, res, next) => {
   try {
-    const { password } = req.body;
+    const { password, token: bodyToken } = req.body;
+    const resetToken = req.params.resetToken || bodyToken;
 
-    if (!password || password.length < 6) {
+    if (!resetToken || typeof resetToken !== 'string') {
+      return ApiResponse.error(res, 'A valid password reset token is required', null, 400);
+    }
+    if (typeof password !== 'string' || password.length < 6) {
       return ApiResponse.error(
         res,
         'Please provide a new password with at least 6 characters',
@@ -243,7 +228,7 @@ exports.resetPassword = async (req, res, next) => {
     }
 
     // Get hashed token
-    const hashed = hashToken(req.params.resetToken);
+    const hashed = hashToken(resetToken);
 
     const user = await User.findOne({
       resetPasswordToken: hashed,
@@ -256,6 +241,15 @@ exports.resetPassword = async (req, res, next) => {
         'Invalid or expired password reset token',
         null,
         400
+      );
+    }
+
+    if (!user.isActive) {
+      return ApiResponse.error(
+        res,
+        'This account has been deactivated. Please contact your Super Admin.',
+        null,
+        403
       );
     }
 

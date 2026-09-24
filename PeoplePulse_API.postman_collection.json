@@ -251,7 +251,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@peoplepulse.com\",\n  \"password\": \"Password@123\",\n  \"role\": \"employee\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\"\n}"
+          "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@peoplepulse.com\",\n  \"password\": \"Password@123\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/auth/register",
@@ -365,6 +365,59 @@
             { "key": "limit", "value": "30" }
           ]
         }
+      }
+    },
+    {
+      "name": "18. List Employees",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/employees?page=1&limit=10&search=&department=Engineering&location=Head%20Office&status=active",
+          "host": ["{{baseUrl}}"],
+          "path": ["employees"],
+          "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" }, { "key": "department", "value": "Engineering" }, { "key": "location", "value": "Head Office" }, { "key": "status", "value": "active" }]
+        }
+      }
+    },
+    {
+      "name": "19. Get Employee",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/employees/REPLACE_WITH_EMPLOYEE_ID", "host": ["{{baseUrl}}"], "path": ["employees", "REPLACE_WITH_EMPLOYEE_ID"] }
+      }
+    },
+    {
+      "name": "20. Create Employee",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@peoplepulse.com\",\n  \"password\": \"Password@123\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\",\n  \"location\": \"Head Office\",\n  \"status\": \"active\"\n}" },
+        "url": { "raw": "{{baseUrl}}/employees", "host": ["{{baseUrl}}"], "path": ["employees"] }
+      }
+    },
+    {
+      "name": "21. Update Employee",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"department\": \"Product Engineering\",\n  \"designation\": \"Senior Software Engineer\",\n  \"location\": \"Remote\",\n  \"status\": \"on-leave\"\n}" },
+        "url": { "raw": "{{baseUrl}}/employees/REPLACE_WITH_EMPLOYEE_ID", "host": ["{{baseUrl}}"], "path": ["employees", "REPLACE_WITH_EMPLOYEE_ID"] }
+      }
+    },
+    {
+      "name": "22. Deactivate Employee",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/employees/REPLACE_WITH_EMPLOYEE_ID", "host": ["{{baseUrl}}"], "path": ["employees", "REPLACE_WITH_EMPLOYEE_ID"] }
       }
     }
   ]

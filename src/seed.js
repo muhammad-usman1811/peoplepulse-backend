@@ -40,6 +40,18 @@ const seedUsers = async () => {
       manager: superAdmin._id,
     });
 
+    await User.create({
+      name: 'HR Manager',
+      email: 'hr@peoplepulse.com',
+      password: 'Password@123',
+      role: 'hr',
+      employeeId: 'EMP-1002',
+      department: 'Human Resources',
+      designation: 'HR Manager',
+      location: 'Head Office',
+      manager: superAdmin._id,
+    });
+
     console.log('-------------------------------------------------------');
     console.log('✅ SEED COMPLETED SUCCESSFULLY!');
     console.log('-------------------------------------------------------');
@@ -53,6 +65,11 @@ const seedUsers = async () => {
     console.log('   Email:    sarah.connor@peoplepulse.com');
     console.log('   Password: Password@123');
     console.log('   Role:     employee');
+    console.log('');
+    console.log('🧑‍💼 HR Manager:');
+    console.log('   Email:    hr@peoplepulse.com');
+    console.log('   Password: Password@123');
+    console.log('   Role:     hr');
     console.log('-------------------------------------------------------');
 
     // Inspect direct database representation to verify encryption & hashing

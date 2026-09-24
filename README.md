@@ -126,15 +126,16 @@ Base URL: `http://localhost:5000/api`
   "success": true,
   "message": "Password reset link generated successfully",
   "data": {
-    "resetUrl": "http://localhost:5000/api/auth/reset-password/a1b2c3d4...",
-    "resetToken": "a1b2c3d4...",
     "expiresInMinutes": 30
   }
 }
 ```
 
+In non-production environments only, the response also includes `resetUrl` and `resetToken` for local testing. Production responses never expose the token.
+
 ### 4. Reset Password
 - **PUT** `/auth/reset-password/:resetToken`
+- **POST** `/auth/reset-password` with `{ "token": "...", "password": "..." }`
 - **Body**:
 ```json
 {
@@ -142,6 +143,17 @@ Base URL: `http://localhost:5000/api`
 }
 ```
 - **Response**: `200 OK`
+
+The email link opens `GET /reset-password.html?token=...`, which submits the new password to the reset API. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `EMAIL_USER`, and `EMAIL_PASS` in `.env`. For Gmail, use an App Password.
+
+### 5. Employee Management (Admin/HR only for writes)
+- **GET** `/employees?page=1&limit=10&search=ali&department=Engineering&location=Head%20Office&status=active`
+- **GET** `/employees/:id`
+- **POST** `/employees` with `name`, `email`, and `password` (optional `employeeId`, `phoneNumber`, `department`, `designation`, `location`, `status`, `manager`)
+- **PUT** `/employees/:id` (supports `location`, `status: active|on-leave`, and `isActive`)
+- **DELETE** `/employees/:id` (soft-deactivates the employee)
+
+All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing and detail are restricted to `superadmin`, `admin`, or `hr`; create, update, and deactivate require the same roles and only target users with `role: employee`.
 
 ### 5. Get Logged-in Profile (Protected)
 - **GET** `/auth/me`
