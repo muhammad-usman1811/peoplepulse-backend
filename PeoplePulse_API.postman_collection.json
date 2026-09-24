@@ -327,6 +327,45 @@
         "body": { "mode": "raw", "raw": "{\n  \"name\": \"Islamabad Office\"\n}" },
         "url": { "raw": "{{baseUrl}}/org/locations", "host": ["{{baseUrl}}"], "path": ["org", "locations"] }
       }
+    },
+    {
+      "name": "18. Clock In",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": { "raw": "{{baseUrl}}/attendance/clock-in", "host": ["{{baseUrl}}"], "path": ["attendance", "clock-in"] }
+      }
+    },
+    {
+      "name": "19. Clock Out",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": { "raw": "{{baseUrl}}/attendance/clock-out", "host": ["{{baseUrl}}"], "path": ["attendance", "clock-out"] }
+      }
+    },
+    {
+      "name": "20. My Attendance History",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/attendance/me?from=2026-09-01&to=2026-09-30&limit=30",
+          "host": ["{{baseUrl}}"],
+          "path": ["attendance", "me"],
+          "query": [
+            { "key": "from", "value": "2026-09-01" },
+            { "key": "to", "value": "2026-09-30" },
+            { "key": "limit", "value": "30" }
+          ]
+        }
+      }
     }
   ]
 }

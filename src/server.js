@@ -12,6 +12,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const orgRoutes = require('./routes/orgRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
@@ -102,6 +103,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/org', orgRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 // 404 Route Not Found Handler
 app.use((req, res) => {
