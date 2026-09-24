@@ -11,13 +11,12 @@ const {
 
 const router = express.Router();
 
-// A valid JWT alone shouldn't allow unlimited guesses at the current password
-const passwordLimiter = rateLimit({
+const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: {
     success: false,
-    message: 'Too many password change attempts, please try again after 15 minutes',
+    message: 'Too many password change attempts from this IP, please try again after 15 minutes',
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -26,7 +25,7 @@ const passwordLimiter = rateLimit({
 router.use(protect);
 router.get('/', getProfile);
 router.put('/', updateProfile);
-router.put('/password', passwordLimiter, changePassword);
+router.put('/password', passwordChangeLimiter, changePassword);
 router.get('/notifications', getNotifications);
 router.put('/notifications', updateNotifications);
 
