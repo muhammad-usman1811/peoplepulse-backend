@@ -236,7 +236,10 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['name'],
-                properties: { name: { type: 'string', example: 'Product Design' } },
+                properties: {
+                  name: { type: 'string', example: 'Product Design' },
+                  location: { type: 'string', example: 'Lahore', nullable: true },
+                },
               },
             },
           },
@@ -274,7 +277,10 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['name'],
-                properties: { name: { type: 'string', example: 'Product Design' } },
+                properties: {
+                  name: { type: 'string', example: 'Product Design' },
+                  location: { type: 'string', example: 'Lahore', nullable: true },
+                },
               },
             },
           },
@@ -473,11 +479,127 @@ const swaggerDocument = {
         },
       },
     },
+    '/attendance/clock-in': {
+      post: {
+        summary: 'Clock In for Today',
+        description: 'Creates or updates the employee today attendance record with the current clock-in time.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          201: { description: 'Clock-in successful' },
+          400: { description: 'Invalid request or attendance already processed' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          409: { description: 'Already clocked in or already clocked out for today' },
+        },
+      },
+    },
+    '/attendance/clock-out': {
+      post: {
+        summary: 'Clock Out for Today',
+        description: 'Marks the employee attendance record with the current clock-out time.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Clock-out successful' },
+          400: { description: 'No attendance found for today or not clocked in yet' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          409: { description: 'Already clocked out for today' },
+        },
+      },
+    },
+    '/attendance/me': {
+      get: {
+        summary: 'Get My Attendance History',
+        description: 'Returns the authenticated employee attendance history for recent dates, optionally filtered by from/to query params.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            in: 'query',
+            name: 'from',
+            schema: { type: 'string', format: 'date' },
+            description: 'Start date filter (YYYY-MM-DD)',
+          },
+          {
+            in: 'query',
+            name: 'to',
+            schema: { type: 'string', format: 'date' },
+            description: 'End date filter (YYYY-MM-DD)',
+          },
+          {
+            in: 'query',
+            name: 'limit',
+            schema: { type: 'integer', default: 30 },
+            description: 'Maximum records to return',
+          },
+        ],
+        responses: {
+          200: { description: 'Attendance history retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+    },
+    '/employees': {
+      get: {
+        summary: 'List Employees',
+        tags: ['Employees'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 10 } },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'department', in: 'query', schema: { type: 'string' } },
+          { name: 'location', in: 'query', schema: { type: 'string' } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'on-leave'] } },
+          { name: 'isActive', in: 'query', schema: { type: 'boolean' } },
+        ],
+      },
+      post: {
+        summary: 'Create Employee',
+        tags: ['Employees'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object', required: ['name', 'email', 'password'],
+            properties: {
+              name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email' },
+              password: { type: 'string', minLength: 6 }, employeeId: { type: 'string' },
+              department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
+              status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
+            },
+          } } },
+        },
+        responses: { 201: { description: 'Employee created successfully' }, 403: { description: 'HR/Admin role required' } },
+      },
+    },
+    '/employees/{id}': {
+      get: {
+        summary: 'Get Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Employee retrieved successfully' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' } },
+      },
+      put: {
+        summary: 'Update Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: {
+          type: 'object', properties: { department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, isActive: { type: 'boolean' } },
+        } } } },
+        responses: { 200: { description: 'Employee updated successfully' }, 403: { description: 'HR/Admin role required' } },
+      },
+      delete: {
+        summary: 'Deactivate Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Employee deactivated successfully' }, 403: { description: 'HR/Admin role required' } },
+      },
+    },
     '/auth/forgot-password': {
       post: {
         summary: 'Request Password Reset Link',
         description:
-          'Sends a password reset token if work email exists in the database.',
+          'If the work email exists, a reset link is emailed to it when EMAIL_USER/EMAIL_PASS are configured on the server. ' +
+          'Otherwise (e.g. local development), the link and token are returned directly in the response instead of being emailed. ' +
+          'Always returns a generic success message for an unknown email, to avoid revealing which addresses are registered.',
         tags: ['Authentication'],
         requestBody: {
           required: true,
@@ -498,7 +620,14 @@ const swaggerDocument = {
         },
         responses: {
           200: {
-            description: 'Password reset link and token generated',
+            description:
+              'Either "reset link emailed" (no data) or, when email delivery is not configured, "link generated" with resetUrl/resetToken/expiresInMinutes in data.',
+          },
+          400: {
+            description: 'Email address missing from request body',
+          },
+          502: {
+            description: 'Email delivery is configured but sending the reset email failed',
           },
         },
       },
@@ -547,6 +676,31 @@ const swaggerDocument = {
         },
       },
     },
+    '/auth/reset-password': {
+      post: {
+        summary: 'Reset Password Using Token in Request Body',
+        tags: ['Authentication'],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token', 'password'],
+                properties: {
+                  token: { type: 'string' },
+                  password: { type: 'string', minLength: 6, example: 'NewSecurePassword@123' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Password reset successful' },
+          400: { description: 'Invalid or expired reset token' },
+        },
+      },
+    },
     '/auth/register': {
       post: {
         summary: 'Register New Corporate User',
@@ -563,11 +717,6 @@ const swaggerDocument = {
                   name: { type: 'string', example: 'Alex Johnson' },
                   email: { type: 'string', example: 'alex.johnson@peoplepulse.com' },
                   password: { type: 'string', example: 'Password@123' },
-                  role: {
-                    type: 'string',
-                    enum: ['superadmin', 'admin', 'hr', 'employee'],
-                    example: 'employee',
-                  },
                   department: { type: 'string', example: 'Product Engineering' },
                   designation: { type: 'string', example: 'Software Engineer' },
                 },

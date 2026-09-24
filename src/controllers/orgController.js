@@ -10,17 +10,30 @@ const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const listRecords = (Model, label, resourceKey) => async (req, res, next) => {
   try {
     const query = {};
-    const filterValues = [
-      req.query.search,
-      req.query.q,
-      req.query.name,
-      req.query.location,
-    ].filter((value) => typeof value === 'string' && value.trim().length > 0);
+    const nameFilters = [req.query.search, req.query.q, req.query.name].filter(
+      (value) => typeof value === 'string' && value.trim().length > 0
+    );
 
-    if (filterValues.length > 0) {
-      query.$or = filterValues.map((value) => ({
+    if (nameFilters.length > 0) {
+      query.$or = nameFilters.map((value) => ({
         name: { $regex: escapeRegex(value.trim()), $options: 'i' },
       }));
+    }
+
+    if (Model.modelName === 'Department') {
+      const location = typeof req.query.location === 'string' ? req.query.location.trim() : '';
+      if (location) {
+        const locationCondition = {
+          location: { $regex: escapeRegex(location), $options: 'i' },
+        };
+
+        if (query.$or) {
+          query.$and = [locationCondition, { $or: query.$or }];
+          delete query.$or;
+        } else {
+          query.location = { $regex: escapeRegex(location), $options: 'i' };
+        }
+      }
     }
 
     const records = await Model.find(query).sort({ name: 1 });
@@ -50,7 +63,12 @@ const createRecord = (Model, label, resourceKey) => async (req, res, next) => {
       return ApiResponse.error(res, `${label} name is required`, null, 400);
     }
 
-    const record = await Model.create({ name });
+    const payload = { name };
+    if (Model.modelName === 'Department') {
+      payload.location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+    }
+
+    const record = await Model.create(payload);
     return ApiResponse.success(res, `${label} created successfully`, { [resourceKey.slice(0, -1)]: record }, 201);
   } catch (err) {
     if (err.code === 11000) {
@@ -73,6 +91,9 @@ const updateRecord = (Model, label, resourceKey) => async (req, res, next) => {
     }
 
     record.name = name;
+    if (Model.modelName === 'Department') {
+      record.location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+    }
     await record.save();
 
     return ApiResponse.success(res, `${label} updated successfully`, { [resourceKey.slice(0, -1)]: record });

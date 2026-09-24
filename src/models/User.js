@@ -57,6 +57,17 @@ const UserSchema = new mongoose.Schema(
       default: 'Team Member',
       trim: true,
     },
+    location: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'on-leave'],
+      default: 'active',
+      trim: true,
+    },
     manager: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
