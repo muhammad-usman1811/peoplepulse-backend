@@ -57,12 +57,12 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['username', 'password'],
+                required: ['email', 'password'],
                 properties: {
-                  username: {
+                  email: {
                     type: 'string',
                     format: 'email',
-                    description: 'Work email address (`email` is also accepted as the field name)',
+                    description: 'Work email address (`username` is also accepted as an alias)',
                     example: 'admin@peoplepulse.com',
                   },
                   password: {
@@ -539,6 +539,96 @@ const swaggerDocument = {
         },
       },
     },
+    '/attendance/team': {
+      get: {
+        summary: 'Get Team Attendance',
+        description: 'Returns attendance for active employees who report directly to the authenticated user.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' } },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } },
+        ],
+        responses: {
+          200: { description: 'Team attendance retrieved successfully' },
+          400: { description: 'Invalid date or limit filter' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+        },
+      },
+    },
+    '/v1/attendance': {
+      get: {
+        summary: 'Query Attendance Records (Admin/HR)',
+        description: 'Returns attendance records, optionally filtered by employee ID and local calendar date range. Dates use APP_TIMEZONE (default Asia/Karachi).',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'employeeId', schema: { type: 'string' }, description: 'MongoDB user ID or business employee ID' },
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Start date (YYYY-MM-DD)' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'End date (YYYY-MM-DD)' },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } },
+        ],
+        responses: {
+          200: { description: 'Attendance records retrieved successfully' },
+          400: { description: 'Invalid date or limit filter' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can query attendance' },
+          404: { description: 'Employee not found' },
+        },
+      },
+    },
+    '/payroll/salary-structure': {
+      get: {
+        summary: 'List Salary Structures',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Salary structures retrieved successfully' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can manage salary structures' },
+        },
+      },
+      post: {
+        summary: 'Create Salary Structure',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['grade', 'basicPercentage'],
+                properties: {
+                  grade: { type: 'string', example: 'G7' },
+                  basicPercentage: { type: 'number', minimum: 0, maximum: 100, example: 60 },
+                  allowances: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['name', 'value'],
+                      properties: {
+                        name: { type: 'string', example: 'Housing' },
+                        type: { type: 'string', enum: ['percentage', 'fixed'], default: 'percentage' },
+                        value: { type: 'number', minimum: 0, example: 20 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Salary structure created successfully' },
+          400: { description: 'Invalid salary structure' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can manage salary structures' },
+          409: { description: 'A salary structure for this grade already exists' },
+        },
+      },
+    },
     '/employees': {
       get: {
         summary: 'List Employees',
@@ -659,6 +749,8 @@ const swaggerDocument = {
                 properties: {
                   password: {
                     type: 'string',
+                    minLength: 6,
+                    maxLength: 128,
                     example: 'NewSecurePassword@123',
                   },
                 },
@@ -689,7 +781,7 @@ const swaggerDocument = {
                 required: ['token', 'password'],
                 properties: {
                   token: { type: 'string' },
-                  password: { type: 'string', minLength: 6, example: 'NewSecurePassword@123' },
+                  password: { type: 'string', minLength: 6, maxLength: 128, example: 'NewSecurePassword@123' },
                 },
               },
             },
@@ -706,6 +798,7 @@ const swaggerDocument = {
         summary: 'Register New Corporate User',
         description: 'Creates a new user with encrypted personal data and hashed password.',
         tags: ['Authentication'],
+        security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -716,7 +809,7 @@ const swaggerDocument = {
                 properties: {
                   name: { type: 'string', example: 'Alex Johnson' },
                   email: { type: 'string', example: 'alex.johnson@peoplepulse.com' },
-                  password: { type: 'string', example: 'Password@123' },
+                  password: { type: 'string', minLength: 6, maxLength: 128, example: 'NewSecurePassword@123' },
                   department: { type: 'string', example: 'Product Engineering' },
                   designation: { type: 'string', example: 'Software Engineer' },
                 },
@@ -728,9 +821,130 @@ const swaggerDocument = {
           201: {
             description: 'User created successfully',
           },
+          401: { description: 'Authentication required' },
+          403: { description: 'Only admin, HR, or superadmin can register employees' },
           409: {
             description: 'Email already exists',
           },
+        },
+      },
+    },
+    '/payroll/salary-structure/{id}': {
+      get: {
+        summary: 'Get Salary Structure by ID',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the salary structure' },
+        ],
+        responses: {
+          200: { description: 'Salary structure retrieved successfully' },
+          400: { description: 'Invalid ID format' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can access salary structures' },
+          404: { description: 'Salary structure not found' },
+        },
+      },
+      put: {
+        summary: 'Update Salary Structure',
+        description: 'Partial update — only send the fields you want to change. An audit log entry is recorded automatically.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the salary structure' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  grade: { type: 'string', example: 'G8' },
+                  basicPercentage: { type: 'number', minimum: 0, maximum: 100, example: 65 },
+                  allowances: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['name', 'value'],
+                      properties: {
+                        name: { type: 'string', example: 'Housing' },
+                        type: { type: 'string', enum: ['percentage', 'fixed'], default: 'percentage' },
+                        value: { type: 'number', minimum: 0, example: 20 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Salary structure updated successfully' },
+          400: { description: 'No valid fields provided or invalid values' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can manage salary structures' },
+          404: { description: 'Salary structure not found' },
+          409: { description: 'A salary structure for this grade already exists' },
+        },
+      },
+      delete: {
+        summary: 'Delete Salary Structure',
+        description: 'Permanently removes a salary grade. An audit log entry is recorded automatically.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the salary structure' },
+        ],
+        responses: {
+          200: { description: 'Salary structure deleted successfully' },
+          400: { description: 'Invalid ID format' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only admin, HR, or superadmin can manage salary structures' },
+          404: { description: 'Salary structure not found' },
+        },
+      },
+    },
+    '/audit-log': {
+      get: {
+        summary: 'List Audit Log Entries',
+        description:
+          'Returns a paginated, filterable list of audit log entries. ' +
+          'Restricted to superadmin and admin roles.',
+        tags: ['Audit Log'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 }, description: 'Page number' },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 }, description: 'Results per page (max 100)' },
+          { in: 'query', name: 'actor', schema: { type: 'string' }, description: 'Filter by actor (User ObjectId)' },
+          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
+          { in: 'query', name: 'resource', schema: { type: 'string', example: 'SalaryStructure' }, description: 'Filter by entity type' },
+          { in: 'query', name: 'resourceId', schema: { type: 'string' }, description: 'Filter by specific document ID' },
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Start date (ISO 8601), inclusive' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'End date (ISO 8601), inclusive' },
+        ],
+        responses: {
+          200: { description: 'Audit log entries retrieved with pagination metadata' },
+          400: { description: 'Invalid date filter' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only superadmin and admin can view the audit log' },
+        },
+      },
+    },
+    '/audit-log/{id}': {
+      get: {
+        summary: 'Get Single Audit Log Entry',
+        tags: ['Audit Log'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the audit log entry' },
+        ],
+        responses: {
+          200: { description: 'Audit log entry retrieved successfully' },
+          400: { description: 'Invalid ID format' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only superadmin and admin can view the audit log' },
+          404: { description: 'Audit log entry not found' },
         },
       },
     },
@@ -738,3 +952,4 @@ const swaggerDocument = {
 };
 
 module.exports = swaggerDocument;
+

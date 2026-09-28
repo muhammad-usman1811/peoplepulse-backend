@@ -2,18 +2,27 @@ const validator = require('validator');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
+const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
 
 /**
  * @desc    Register a new user
  * @route   POST /api/auth/register
- * @access  Public (or Super Admin protected if configured)
+ * @access  Super Admin, Admin, or HR
  */
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, department, designation } = req.body;
 
     // Validate presence
-    if (!name || !email || !password) {
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      typeof email !== 'string' ||
+      !validator.isEmail(email.trim()) ||
+      typeof password !== 'string' ||
+      password.length < 6 ||
+      password.length > 128
+    ) {
       return ApiResponse.error(
         res,
         'Please provide full name, work email, and password',
@@ -23,7 +32,8 @@ exports.register = async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return ApiResponse.error(
         res,
@@ -36,7 +46,7 @@ exports.register = async (req, res, next) => {
     // Create user (name encrypted, password hashed in pre-save hook)
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password,
       role: 'employee',
       department: department || 'General',
@@ -161,7 +171,7 @@ exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
+    if (typeof email !== 'string' || !validator.isEmail(email.trim())) {
       return ApiResponse.error(res, 'Please provide your work email address', null, 400);
     }
 
@@ -181,12 +191,21 @@ exports.forgotPassword = async (req, res, next) => {
 
     const resetUrl = `${process.env.APP_URL || `${req.protocol}://${req.get('host')}`}/reset-password.html?token=${resetToken}`;
 
-    try {
-      const { sendResetPasswordEmail } = require('../../utils/sendEmail');
+    if (isEmailConfigured()) {
+      try {
       await sendResetPasswordEmail(user.email, resetUrl);
-    } catch (emailError) {
-      // Do not expose account existence or fail the reset flow because SMTP is unavailable.
-      console.error('[Email] Password reset email could not be sent:', emailError.message);
+      } catch (emailError) {
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save({ validateBeforeSave: false });
+        console.error('[Email] Password reset email could not be sent:', emailError.message);
+        return ApiResponse.error(res, 'Password reset email could not be sent. Please try again later.', null, 502);
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+      return ApiResponse.error(res, 'Password reset is temporarily unavailable. Please contact an administrator.', null, 503);
     }
 
     const responseData = { expiresInMinutes: 30 };
@@ -218,7 +237,7 @@ exports.resetPassword = async (req, res, next) => {
     if (!resetToken || typeof resetToken !== 'string') {
       return ApiResponse.error(res, 'A valid password reset token is required', null, 400);
     }
-    if (typeof password !== 'string' || password.length < 6) {
+    if (typeof password !== 'string' || password.length < 6 || password.length > 128) {
       return ApiResponse.error(
         res,
         'Please provide a new password with at least 6 characters',

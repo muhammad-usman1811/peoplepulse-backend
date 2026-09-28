@@ -29,7 +29,7 @@ const protect = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || 'peoplepulse_super_secret_jwt_key_2026_hrms_secure_token'
+      process.env.JWT_SECRET
     );
 
     // Attach user to request object (exclude password)

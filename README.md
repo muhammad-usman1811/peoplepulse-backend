@@ -38,8 +38,8 @@ Cross-platform RESTful API built with **Node.js**, **Express**, and **MongoDB** 
 # Install dependencies
 npm install
 
-# Setup environment variables (already configured in .env)
-# Review .env for PORT, MONGO_URI, JWT_SECRET, and ENCRYPTION_KEY
+# Copy .env.example to .env and provide local values.
+# Production requires MONGO_URI, JWT_SECRET, ENCRYPTION_KEY, and APP_TIMEZONE.
 ```
 
 ### 3. Seed Super Admin Account
@@ -48,11 +48,7 @@ Pre-populates the database with initial accounts:
 npm run seed
 ```
 
-**Default Test Credentials:**
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **Super Admin** 👑 | `admin@peoplepulse.com` | `Password@123` |
-| **Employee** 👤 | `sarah.connor@peoplepulse.com` | `Password@123` |
+The seed script requires `SEED_PASSWORD` and is disabled in production.
 
 ### 4. Start the Server
 ```bash
@@ -154,6 +150,31 @@ The email link opens `GET /reset-password.html?token=...`, which submits the new
 - **DELETE** `/employees/:id` (soft-deactivates the employee)
 
 All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing and detail are restricted to `superadmin`, `admin`, or `hr`; create, update, and deactivate require the same roles and only target users with `role: employee`.
+
+### 6. Attendance
+- **POST** `/attendance/clock-in`
+- **POST** `/attendance/clock-out`
+- **GET** `/attendance/me?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30`
+- **GET** `/attendance/team?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (direct reports)
+- **GET** `/v1/attendance?employeeId=<id>&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (Admin/HR)
+
+Attendance timestamps are stored in UTC. Calendar dates and the 9:00 AM late threshold use `APP_TIMEZONE` (default `Asia/Karachi`).
+
+### 7. Payroll Salary Structures
+- **GET** `/payroll/salary-structure` (Admin/HR)
+- **POST** `/payroll/salary-structure` (Admin/HR)
+
+Example request:
+```json
+{
+  "grade": "G7",
+  "basicPercentage": 60,
+  "allowances": [
+    { "name": "Housing", "type": "percentage", "value": 20 },
+    { "name": "Transport", "type": "fixed", "value": 15000 }
+  ]
+}
+```
 
 ### 5. Get Logged-in Profile (Protected)
 - **GET** `/auth/me`

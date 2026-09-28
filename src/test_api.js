@@ -71,7 +71,10 @@ async function runTests() {
   const testEmail = `developer_${Date.now()}@peoplepulse.com`;
   const regRes = await fetch(`${baseUrl}/auth/register`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${jwtToken}`,
+    },
     body: JSON.stringify({
       name: 'Alex Johnson',
       email: testEmail,

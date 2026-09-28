@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { encrypt, decrypt, hashToken } = require('../utils/cryptoUtils');
+const { encrypt, decrypt, hashToken, isEncryptedValue } = require('../utils/cryptoUtils');
 
 const UserSchema = new mongoose.Schema(
   {
@@ -11,7 +11,7 @@ const UserSchema = new mongoose.Schema(
       required: [true, 'Please provide a full name'],
       trim: true,
       // Field-level AES-256 encryption at rest
-      set: (val) => (val && !val.includes(':') ? encrypt(val) : val),
+      set: (val) => (val && !isEncryptedValue(val) ? encrypt(val) : val),
       get: (val) => (val ? decrypt(val) : val),
     },
     email: {
@@ -134,7 +134,7 @@ UserSchema.methods.getSignedJwtToken = function () {
       email: this.email,
       role: this.role,
     },
-    process.env.JWT_SECRET || 'peoplepulse_super_secret_jwt_key_2026_hrms_secure_token',
+    process.env.JWT_SECRET,
     {
       expiresIn: process.env.JWT_EXPIRE || '7d',
     }
@@ -154,5 +154,9 @@ UserSchema.methods.getResetPasswordToken = function () {
 
   return resetToken;
 };
+
+UserSchema.index({ role: 1, isActive: 1, createdAt: -1 });
+UserSchema.index({ manager: 1, role: 1, isActive: 1 });
+UserSchema.index({ resetPasswordToken: 1, resetPasswordExpire: 1 });
 
 module.exports = mongoose.model('User', UserSchema);

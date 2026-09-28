@@ -1,4 +1,5 @@
 const ApiResponse = require('../utils/apiResponse');
+const mongoose = require('mongoose');
 const Department = require('../models/Department');
 const Designation = require('../models/Designation');
 const Location = require('../models/Location');
@@ -23,9 +24,10 @@ const listRecords = (Model, label, resourceKey) => async (req, res, next) => {
     if (Model.modelName === 'Department') {
       const location = typeof req.query.location === 'string' ? req.query.location.trim() : '';
       if (location) {
-        const locationCondition = {
-          location: { $regex: escapeRegex(location), $options: 'i' },
-        };
+        if (!mongoose.isValidObjectId(location)) {
+          return ApiResponse.error(res, 'location must be a valid location ID', null, 400);
+        }
+        const locationCondition = { location };
 
         if (query.$or) {
           query.$and = [locationCondition, { $or: query.$or }];
@@ -36,7 +38,9 @@ const listRecords = (Model, label, resourceKey) => async (req, res, next) => {
       }
     }
 
-    const records = await Model.find(query).sort({ name: 1 });
+    let recordsQuery = Model.find(query).sort({ name: 1 });
+    if (Model.modelName === 'Department') recordsQuery = recordsQuery.populate('location', 'name');
+    const records = await recordsQuery;
     return ApiResponse.success(res, `${label} retrieved successfully`, { [resourceKey]: records });
   } catch (err) {
     next(err);
@@ -45,7 +49,9 @@ const listRecords = (Model, label, resourceKey) => async (req, res, next) => {
 
 const getRecordById = (Model, label, resourceKey) => async (req, res, next) => {
   try {
-    const record = await Model.findById(req.params.id);
+    let recordQuery = Model.findById(req.params.id);
+    if (Model.modelName === 'Department') recordQuery = recordQuery.populate('location', 'name');
+    const record = await recordQuery;
     if (!record) {
       return ApiResponse.error(res, `${label} not found`, null, 404);
     }
@@ -65,7 +71,15 @@ const createRecord = (Model, label, resourceKey) => async (req, res, next) => {
 
     const payload = { name };
     if (Model.modelName === 'Department') {
-      payload.location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+      if (req.body.location !== undefined) {
+        if (req.body.location !== null && !mongoose.isValidObjectId(req.body.location)) {
+          return ApiResponse.error(res, 'location must be a valid location ID', null, 400);
+        }
+        if (req.body.location && !(await Location.exists({ _id: req.body.location }))) {
+          return ApiResponse.error(res, 'Location not found', null, 404);
+        }
+        payload.location = req.body.location || null;
+      }
     }
 
     const record = await Model.create(payload);
@@ -91,8 +105,14 @@ const updateRecord = (Model, label, resourceKey) => async (req, res, next) => {
     }
 
     record.name = name;
-    if (Model.modelName === 'Department') {
-      record.location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+    if (Model.modelName === 'Department' && req.body.location !== undefined) {
+      if (req.body.location !== null && !mongoose.isValidObjectId(req.body.location)) {
+        return ApiResponse.error(res, 'location must be a valid location ID', null, 400);
+      }
+      if (req.body.location && !(await Location.exists({ _id: req.body.location }))) {
+        return ApiResponse.error(res, 'Location not found', null, 404);
+      }
+      record.location = req.body.location || null;
     }
     await record.save();
 

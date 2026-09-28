@@ -26,6 +26,14 @@ const AttendanceSchema = new mongoose.Schema(
       enum: ['present', 'late', 'half-day', 'absent'],
       default: 'present',
     },
+    isLate: {
+      type: Boolean,
+      default: false,
+    },
+    isHalfDay: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

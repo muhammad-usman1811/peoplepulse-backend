@@ -14,6 +14,11 @@
       "key": "token",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "seedPassword",
+      "value": "replace-with-SEED_PASSWORD",
+      "type": "string"
     }
   ],
   "item": [
@@ -56,7 +61,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}"
+          "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"{{seedPassword}}\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/auth/login",
@@ -144,7 +149,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"currentPassword\": \"Password@123\",\n  \"newPassword\": \"NewPassword@123\"\n}"
+          "raw": "{\n  \"currentPassword\": \"{{seedPassword}}\",\n  \"newPassword\": \"NewPassword@123\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/profile/password",
@@ -202,10 +207,8 @@
       "request": {
         "method": "POST",
         "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
         ],
         "body": {
           "mode": "raw",
@@ -251,7 +254,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@peoplepulse.com\",\n  \"password\": \"Password@123\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\"\n}"
+          "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@peoplepulse.com\",\n  \"password\": \"{{seedPassword}}\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/auth/register",
@@ -396,7 +399,7 @@
           { "key": "Content-Type", "value": "application/json" },
           { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
         ],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@peoplepulse.com\",\n  \"password\": \"Password@123\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\",\n  \"location\": \"Head Office\",\n  \"status\": \"active\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@peoplepulse.com\",\n  \"password\": \"{{seedPassword}}\",\n  \"department\": \"Engineering\",\n  \"designation\": \"Software Engineer\",\n  \"location\": \"Head Office\",\n  \"status\": \"active\"\n}" },
         "url": { "raw": "{{baseUrl}}/employees", "host": ["{{baseUrl}}"], "path": ["employees"] }
       }
     },
@@ -418,6 +421,52 @@
         "method": "DELETE",
         "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
         "url": { "raw": "{{baseUrl}}/employees/REPLACE_WITH_EMPLOYEE_ID", "host": ["{{baseUrl}}"], "path": ["employees", "REPLACE_WITH_EMPLOYEE_ID"] }
+      }
+    },
+    {
+      "name": "23. Team Attendance",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/attendance/team?from=2026-09-01&to=2026-09-30&limit=30",
+          "host": ["{{baseUrl}}"],
+          "path": ["attendance", "team"],
+          "query": [{ "key": "from", "value": "2026-09-01" }, { "key": "to", "value": "2026-09-30" }, { "key": "limit", "value": "30" }]
+        }
+      }
+    },
+    {
+      "name": "24. Admin Attendance",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/attendance?employeeId=REPLACE_WITH_EMPLOYEE_ID&from=2026-09-01&to=2026-09-30&limit=30",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "attendance"],
+          "query": [{ "key": "employeeId", "value": "REPLACE_WITH_EMPLOYEE_ID" }, { "key": "from", "value": "2026-09-01" }, { "key": "to", "value": "2026-09-30" }, { "key": "limit", "value": "30" }]
+        }
+      }
+    },
+    {
+      "name": "25. List Salary Structures",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "url": { "raw": "{{baseUrl}}/payroll/salary-structure", "host": ["{{baseUrl}}"], "path": ["payroll", "salary-structure"] }
+      }
+    },
+    {
+      "name": "26. Create Salary Structure",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"grade\": \"G7\",\n  \"basicPercentage\": 60,\n  \"allowances\": [\n    { \"name\": \"Housing\", \"type\": \"percentage\", \"value\": 20 },\n    { \"name\": \"Transport\", \"type\": \"fixed\", \"value\": 15000 }\n  ]\n}" },
+        "url": { "raw": "{{baseUrl}}/payroll/salary-structure", "host": ["{{baseUrl}}"], "path": ["payroll", "salary-structure"] }
       }
     }
   ]

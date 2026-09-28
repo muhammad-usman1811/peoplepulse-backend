@@ -82,14 +82,27 @@ exports.listEmployees = async (req, res, next) => {
       filter.isActive = req.query.isActive === 'true';
     }
 
-    const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
-    const records = await User.find(filter).sort({ createdAt: -1 }).populate('manager', 'name email employeeId');
-    const filtered = search
-      ? records.filter((employee) => [employee.name, employee.email, employee.employeeId, employee.phoneNumber]
-          .some((value) => value && String(value).toLowerCase().includes(search)))
-      : records;
-    const total = filtered.length;
-    const employees = filtered.slice((page - 1) * limit, page * limit).map(employeeFields);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    if (search) {
+      const searchRegex = new RegExp(escapeRegex(search), 'i');
+      const nameMatches = await User.find(filter).select('name');
+      const nameIds = nameMatches
+        .filter((employee) => employee.name && employee.name.toLowerCase().includes(search.toLowerCase()))
+        .map((employee) => employee._id);
+      filter.$or = [
+        { email: searchRegex },
+        { employeeId: searchRegex },
+        { phoneNumber: searchRegex },
+        { _id: { $in: nameIds } },
+      ];
+    }
+
+    const total = await User.countDocuments(filter);
+    const employees = (await User.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('manager', 'name email employeeId')).map(employeeFields);
 
     return ApiResponse.success(res, 'Employees retrieved successfully', {
       employees,
