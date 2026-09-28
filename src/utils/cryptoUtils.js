@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { getEncryptionKey } = require('../config/security');
 
 // Algorithm: AES-256-GCM (Authenticated Encryption)
 const ALGORITHM = 'aes-256-gcm';
@@ -6,12 +7,7 @@ const IV_LENGTH = 16; // 16 bytes for AES
 
 // Helper to get 32-byte encryption key buffer
 function getSecretKey() {
-  const envKey = process.env.ENCRYPTION_KEY || 'f6c77b2184d28d0959fcf533bfa86178c1b6985a9bc6942ad716a5efd082496a';
-  if (Buffer.byteLength(envKey, 'hex') === 32) {
-    return Buffer.from(envKey, 'hex');
-  }
-  // Fallback: derive 32 bytes using SHA-256
-  return crypto.createHash('sha256').update(String(envKey)).digest();
+  return Buffer.from(getEncryptionKey(), 'hex');
 }
 
 /**

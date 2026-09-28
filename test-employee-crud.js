@@ -3,6 +3,9 @@ const assert = require('assert');
 const mongoose = require('mongoose');
 const dns = require('dns');
 const User = require('./src/models/User');
+const Department = require('./src/models/Department');
+const Designation = require('./src/models/Designation');
+const Location = require('./src/models/Location');
 
 dns.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','));
 
@@ -29,6 +32,12 @@ const login = async (email) => {
   await mongoose.connect(process.env.MONGO_URI);
 
   try {
+    await Promise.all([
+      Department.updateOne({ name: 'Engineering' }, { $setOnInsert: { name: 'Engineering' } }, { upsert: true }),
+      Department.updateOne({ name: 'General' }, { $setOnInsert: { name: 'General' } }, { upsert: true }),
+      Designation.updateOne({ name: 'Team Member' }, { $setOnInsert: { name: 'Team Member' } }, { upsert: true }),
+      Location.updateOne({ name: 'Head Office' }, { $setOnInsert: { name: 'Head Office' } }, { upsert: true }),
+    ]);
     const hr = await User.create({
       name: 'Temporary HR Test',
       email: `temporary.hr.${suffix}@peoplepulse.com`,
@@ -68,11 +77,34 @@ const login = async (email) => {
     const targetId = created.data.data.employee.id;
     createdIds.push(targetId);
 
+    const defaults = await request('/employees', {
+      method: 'POST',
+      headers: hrHeaders,
+      body: JSON.stringify({
+        name: 'CRUD Default Values Target',
+        email: `crud.defaults.${suffix}@peoplepulse.com`,
+        password: 'Password@123',
+      }),
+    });
+    assert.strictEqual(defaults.status, 201, 'HR should create employees with valid defaults');
+    assert.strictEqual(defaults.data.data.employee.department, 'General');
+    assert.strictEqual(defaults.data.data.employee.designation, 'Team Member');
+    assert.strictEqual(defaults.data.data.employee.location, '');
+    createdIds.push(defaults.data.data.employee.id);
+
     const filtered = await request('/employees?department=Engineering&location=Head%20Office&status=on-leave', {
       headers: hrHeaders,
     });
     assert.strictEqual(filtered.status, 200, 'Employee filters should return 200');
     assert(filtered.data.data.employees.some((item) => String(item.id) === String(targetId)), 'Filters should find the target employee');
+
+    const clearedLocation = await request(`/employees/${targetId}`, {
+      method: 'PUT',
+      headers: hrHeaders,
+      body: JSON.stringify({ location: '' }),
+    });
+    assert.strictEqual(clearedLocation.status, 200, 'HR should be able to clear an optional location');
+    assert.strictEqual(clearedLocation.data.data.employee.location, '');
 
     const blockedCreate = await request('/employees', {
       method: 'POST',

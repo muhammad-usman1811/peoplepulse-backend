@@ -7,6 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/seed.js",
+    "backfill:search-index": "node src/scripts/backfillNameSearchTokens.js",
+    "test:leave-wfh": "node test-leave-wfh.js",
     "test": "cross-env NODE_ENV=test node src/test_api.js",
     "test:employee": "node test-employee-crud.js"
   },

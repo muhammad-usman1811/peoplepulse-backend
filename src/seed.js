@@ -4,16 +4,33 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const User = require('./models/User');
+const Department = require('./models/Department');
+const Designation = require('./models/Designation');
+const Location = require('./models/Location');
+const LeaveRequest = require('./models/LeaveRequest');
+const WfhRequest = require('./models/WfhRequest');
 
 const seedUsers = async () => {
   try {
+    if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DESTRUCTIVE_SEED !== 'true') {
+      throw new Error('Seed refused. Set ALLOW_DESTRUCTIVE_SEED=true in a non-production environment to replace users.');
+    }
     const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/peoplepulse';
     await mongoose.connect(mongoURI);
     console.log('[Seed] Connected to MongoDB...');
 
     // Clear existing users to avoid duplicates
     await User.deleteMany();
+    await LeaveRequest.deleteMany();
+    await WfhRequest.deleteMany();
     console.log('[Seed] Cleared existing users.');
+
+    await Promise.all([
+      ...['General', 'Executive HR', 'Engineering', 'Human Resources'].map((name) => Department.updateOne({ name }, { $setOnInsert: { name } }, { upsert: true })),
+      ...['Chief HR Officer', 'Senior Mobile Engineer', 'HR Manager', 'Team Member'].map((name) => Designation.updateOne({ name }, { $setOnInsert: { name } }, { upsert: true })),
+      ...['Head Office'].map((name) => Location.updateOne({ name }, { $setOnInsert: { name } }, { upsert: true })),
+    ]);
+    console.log('[Seed] Master lists are ready.');
 
     // 1. Super Admin (matches the UI "Super Admin" view)
     const superAdmin = await User.create({

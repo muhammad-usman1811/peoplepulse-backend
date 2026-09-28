@@ -14,10 +14,15 @@ const profileRoutes = require('./routes/profileRoutes');
 const orgRoutes = require('./routes/orgRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
+const { leaveRoutes, wfhRoutes } = require('./routes/requestRoutes');
+const performanceRoutes = require('./routes/performanceRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./config/swagger');
+const { validateSecurityConfig } = require('./config/security');
+
+validateSecurityConfig();
 
 // Initialize MongoDB connection
 connectDB();
@@ -53,7 +58,7 @@ const corsOptions = {
     return callback(new Error('Blocked by CORS policy'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 };
 
@@ -68,6 +73,7 @@ if (process.env.NODE_ENV !== 'test') {
 // Body parsers
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Swagger Interactive API Documentation UI
 // Assets load from a CDN because swagger-ui-express static files are not bundled on Vercel
@@ -106,6 +112,9 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/org', orgRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/employees', employeeRoutes);
+app.use('/api/leave-requests', leaveRoutes);
+app.use('/api/wfh-requests', wfhRoutes);
+app.use('/api/performance', performanceRoutes);
 
 // 404 Route Not Found Handler
 app.use((req, res) => {

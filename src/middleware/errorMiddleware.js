@@ -37,7 +37,7 @@ const errorHandler = (err, req, res, next) => {
   return ApiResponse.error(
     res,
     error.message || 'Internal Server Error',
-    process.env.NODE_ENV === 'development' ? err.stack : null,
+    process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? error.details || err.stack : null,
     error.statusCode || 500
   );
 };
