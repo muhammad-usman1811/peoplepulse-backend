@@ -593,13 +593,160 @@ const swaggerDocument = {
         responses: { 200: { description: 'Employee deactivated successfully' }, 403: { description: 'HR/Admin role required' } },
       },
     },
+    '/leave-requests': {
+      post: {
+        summary: 'Submit Leave Request',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['type', 'startDate', 'endDate'],
+                properties: {
+                  type: { type: 'string', enum: ['annual', 'sick', 'casual', 'unpaid'] },
+                  startDate: { type: 'string', format: 'date' },
+                  endDate: { type: 'string', format: 'date' },
+                  reason: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { 201: { description: 'Leave request submitted' }, 400: { description: 'Invalid request' }, 409: { description: 'Overlapping request' } },
+      },
+    },
+    '/leave-requests/my': {
+      get: {
+        summary: 'List My Leave Requests',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Leave requests retrieved' } },
+      },
+    },
+    '/leave-requests/{id}/approve': {
+      patch: {
+        summary: 'Approve Leave Request',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Leave request approved' }, 404: { description: 'Pending request not found' } },
+      },
+    },
+    '/leave-requests/{id}/reject': {
+      patch: {
+        summary: 'Reject Leave Request',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Leave request rejected' }, 404: { description: 'Pending request not found' } },
+      },
+    },
+    '/wfh-requests': {
+      post: {
+        summary: 'Submit Work From Home Request',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['startDate', 'endDate'],
+                properties: {
+                  startDate: { type: 'string', format: 'date' },
+                  endDate: { type: 'string', format: 'date' },
+                  reason: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { 201: { description: 'WFH request submitted' }, 400: { description: 'Invalid request' }, 409: { description: 'Overlapping request' } },
+      },
+    },
+    '/wfh-requests/my': {
+      get: {
+        summary: 'List My WFH Requests',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'WFH requests retrieved' } },
+      },
+    },
+    '/wfh-requests/{id}/approve': {
+      patch: {
+        summary: 'Approve WFH Request',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'WFH request approved' }, 404: { description: 'Pending request not found' } },
+      },
+    },
+    '/wfh-requests/{id}/reject': {
+      patch: {
+        summary: 'Reject WFH Request',
+        tags: ['Leave and WFH'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'WFH request rejected' }, 404: { description: 'Pending request not found' } },
+      },
+    },
+    '/performance/cycles': {
+      post: {
+        summary: 'Create a Performance Review Cycle',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['period'],
+                properties: {
+                  period: { type: 'string', example: '2026-Q4' },
+                  status: { type: 'string', enum: ['open', 'closed'], example: 'open' },
+                },
+              },
+            },
+          },
+        },
+        responses: { 201: { description: 'Performance cycle created' }, 403: { description: 'HR/Admin role required' }, 409: { description: 'Period already exists' } },
+      },
+    },
+    '/performance/cycles/{cycleId}/reviews': {
+      post: {
+        summary: 'Submit Employee Self-Review',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'cycleId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['selfReview', 'rating'],
+                properties: {
+                  selfReview: { type: 'string' },
+                  rating: { type: 'integer', minimum: 1, maximum: 5 },
+                },
+              },
+            },
+          },
+        },
+        responses: { 201: { description: 'Self-review submitted' }, 400: { description: 'Invalid review or rating' }, 404: { description: 'Open cycle not found' }, 409: { description: 'Review already submitted' } },
+      },
+    },
     '/auth/forgot-password': {
       post: {
         summary: 'Request Password Reset Link',
         description:
-          'If the work email exists, a reset link is emailed to it when EMAIL_USER/EMAIL_PASS are configured on the server. ' +
-          'Otherwise (e.g. local development), the link and token are returned directly in the response instead of being emailed. ' +
-          'Always returns a generic success message for an unknown email, to avoid revealing which addresses are registered.',
+          'Sends a reset link through email when SMTP is configured. The raw token is never returned by the API. ' +
+          'Always returns a generic success message for an unknown email to avoid revealing registered addresses.',
         tags: ['Authentication'],
         requestBody: {
           required: true,

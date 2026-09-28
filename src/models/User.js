@@ -3,6 +3,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { encrypt, decrypt, hashToken } = require('../utils/cryptoUtils');
+const { buildNameSearchTokens } = require('../utils/searchIndex');
+const { getJwtSecret } = require('../config/security');
+
+const isEncryptedName = (value) => typeof value === 'string'
+  && /^[0-9a-f]{32}:[0-9a-f]{32}:[0-9a-f]+$/i.test(value);
 
 const UserSchema = new mongoose.Schema(
   {
@@ -10,9 +15,15 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please provide a full name'],
       trim: true,
+      maxlength: [120, 'Name must not exceed 120 characters'],
       // Field-level AES-256 encryption at rest
-      set: (val) => (val && !val.includes(':') ? encrypt(val) : val),
+      set: (val) => (val && !isEncryptedName(val) ? encrypt(val) : val),
       get: (val) => (val ? decrypt(val) : val),
+    },
+    nameSearchTokens: {
+      type: [String],
+      default: [],
+      select: false,
     },
     email: {
       type: String,
@@ -40,6 +51,7 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please provide a password'],
       minlength: [6, 'Password must be at least 6 characters'],
+      maxlength: [72, 'Password must not exceed 72 characters'],
       select: false, // Never return password in regular queries
     },
     role: {
@@ -114,6 +126,7 @@ const UserSchema = new mongoose.Schema(
 
 // Pre-save hook: Hash password with bcrypt if modified
 UserSchema.pre('save', async function (next) {
+  if (this.isModified('name')) this.nameSearchTokens = buildNameSearchTokens(this.name);
   if (this.isModified('password')) {
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
@@ -134,7 +147,7 @@ UserSchema.methods.getSignedJwtToken = function () {
       email: this.email,
       role: this.role,
     },
-    process.env.JWT_SECRET || 'peoplepulse_super_secret_jwt_key_2026_hrms_secure_token',
+    getJwtSecret(),
     {
       expiresIn: process.env.JWT_EXPIRE || '7d',
     }
@@ -154,5 +167,8 @@ UserSchema.methods.getResetPasswordToken = function () {
 
   return resetToken;
 };
+
+UserSchema.index({ role: 1, isActive: 1, createdAt: -1 });
+UserSchema.index({ nameSearchTokens: 1 });
 
 module.exports = mongoose.model('User', UserSchema);

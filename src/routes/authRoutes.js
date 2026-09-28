@@ -23,8 +23,19 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const registrationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    success: false,
+    message: 'Too many registration attempts from this IP, please try again later',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Routes
-router.post('/register', register);
+router.post('/register', registrationLimiter, register);
 router.post('/login', authLimiter, login);
 router.post('/forgot-password', authLimiter, forgotPassword);
 router.post('/reset-password', authLimiter, resetPassword);

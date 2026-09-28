@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "PeoplePulse Employee CRUD API",
+    "description": "Focused HR/Admin employee CRUD, status/location persistence, and role-access tests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "adminToken", "value": "" },
+    { "key": "employeeToken", "value": "" },
+    { "key": "employeeId", "value": "" },
+    { "key": "employeeEmail", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login Super Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('admin login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('adminToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Create Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee is created', function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) {",
+              "  const employee = pm.response.json().data.employee;",
+              "  pm.collectionVariables.set('employeeId', employee.id);",
+              "  pm.collectionVariables.set('employeeEmail', employee.email);",
+              "  pm.expect(employee.status).to.eql('on-leave');",
+              "  pm.expect(employee.location).to.eql('Head Office');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman Employee {{$guid}}\",\n  \"email\": \"employee.{{$guid}}@peoplepulse.com\",\n  \"password\": \"Password@123\",\n  \"department\": \"General\",\n  \"designation\": \"Team Member\",\n  \"location\": \"Head Office\",\n  \"status\": \"on-leave\"\n}"
+        },
+        "url": "{{baseUrl}}/employees"
+      }
+    },
+    {
+      "name": "List Employees by Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status filter includes created employee', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const employees = pm.response.json().data.employees;",
+              "  pm.expect(employees.some((employee) => String(employee.id) === pm.collectionVariables.get('employeeId'))).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/employees?status=on-leave&location=Head%20Office"
+      }
+    },
+    {
+      "name": "Get Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee details include persisted fields', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const employee = pm.response.json().data.employee;",
+              "  pm.expect(employee.status).to.eql('on-leave');",
+              "  pm.expect(employee.location).to.eql('Head Office');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/employees/{{employeeId}}"
+      }
+    },
+    {
+      "name": "Update Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee status and location update', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const employee = pm.response.json().data.employee;",
+              "  pm.expect(employee.status).to.eql('active');",
+              "  pm.expect(employee.location).to.eql('');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\",\n  \"location\": \"\"\n}" },
+        "url": "{{baseUrl}}/employees/{{employeeId}}"
+      }
+    },
+    {
+      "name": "Login Created Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('created employee login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('employeeToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{employeeEmail}}\",\n  \"password\": \"Password@123\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Employee Cannot Create Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('employee create is forbidden', function () { pm.response.to.have.status(403); });"] }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Forbidden User\",\n  \"email\": \"forbidden.{{$guid}}@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "url": "{{baseUrl}}/employees"
+      }
+    },
+    {
+      "name": "Employee Cannot Deactivate Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('employee deactivation is forbidden', function () { pm.response.to.have.status(403); });"] }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+        "url": "{{baseUrl}}/employees/{{employeeId}}"
+      }
+    },
+    {
+      "name": "Admin Deactivate Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('admin deactivates employee', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().data.employee.isActive).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/employees/{{employeeId}}"
+      }
+    }
+  ]
+}

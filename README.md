@@ -131,7 +131,7 @@ Base URL: `http://localhost:5000/api`
 }
 ```
 
-In non-production environments only, the response also includes `resetUrl` and `resetToken` for local testing. Production responses never expose the token.
+The API never returns the reset token. Configure SMTP variables so the single-use token is delivered only through the password-reset email.
 
 ### 4. Reset Password
 - **PUT** `/auth/reset-password/:resetToken`
@@ -154,6 +154,11 @@ The email link opens `GET /reset-password.html?token=...`, which submits the new
 - **DELETE** `/employees/:id` (soft-deactivates the employee)
 
 All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing and detail are restricted to `superadmin`, `admin`, or `hr`; create, update, and deactivate require the same roles and only target users with `role: employee`.
+
+### Performance Reviews
+- **POST** `/performance/cycles` to create a review period (superadmin, admin, or HR).
+- **POST** `/performance/cycles/:cycleId/reviews` to submit an employee self-review with a rating from 1 to 5.
+- Import `PeoplePulse_Performance_API.postman_collection.json` for the focused Postman flow.
 
 ### 5. Get Logged-in Profile (Protected)
 - **GET** `/auth/me`

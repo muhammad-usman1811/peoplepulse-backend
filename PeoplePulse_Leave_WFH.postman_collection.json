@@ -1,0 +1,100 @@
+{
+  "info": {
+    "name": "PeoplePulse Leave and WFH API",
+    "description": "Employee apply/list and assigned manager approve/reject flows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "employeeToken", "value": "" },
+    { "key": "managerToken", "value": "" },
+    { "key": "leaveRequestId", "value": "" },
+    { "key": "wfhRequestId", "value": "" },
+    { "key": "performanceCycleId", "value": "" },
+    { "key": "performanceReviewId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login Employee",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('employeeToken', pm.response.json().data.token);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"sarah.connor@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Login Manager",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('managerToken', pm.response.json().data.token);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Employee Apply Leave",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('leaveRequestId', pm.response.json().data.request.id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"type\": \"annual\",\n  \"startDate\": \"2026-10-05\",\n  \"endDate\": \"2026-10-07\",\n  \"reason\": \"Family trip\"\n}" },
+        "url": "{{baseUrl}}/leave-requests"
+      }
+    },
+    {
+      "name": "Employee List My Leave",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }], "url": "{{baseUrl}}/leave-requests/my" }
+    },
+    {
+      "name": "Manager Approve Leave",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"note\": \"Approved\"\n}" },
+        "url": "{{baseUrl}}/leave-requests/{{leaveRequestId}}/approve"
+      }
+    },
+    {
+      "name": "Employee Apply WFH",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('wfhRequestId', pm.response.json().data.request.id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"startDate\": \"2026-10-12\",\n  \"endDate\": \"2026-10-12\",\n  \"reason\": \"Home maintenance\"\n}" },
+        "url": "{{baseUrl}}/wfh-requests"
+      }
+    },
+    {
+      "name": "Manager Reject WFH",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"note\": \"Please use the office that day\"\n}" },
+        "url": "{{baseUrl}}/wfh-requests/{{wfhRequestId}}/reject"
+      }
+    },
+    {
+      "name": "HR Create Performance Cycle",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('cycle is created', function () { pm.response.to.have.status(201); });", "const cycle = pm.response.json().data.cycle;", "pm.collectionVariables.set('performanceCycleId', cycle._id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"period\": \"{{$timestamp}}-Q4\",\n  \"status\": \"open\"\n}" },
+        "url": "{{baseUrl}}/performance/cycles"
+      }
+    },
+    {
+      "name": "Employee Submit Self-Review",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('self-review is submitted', function () { pm.response.to.have.status(201); });", "const review = pm.response.json().data.review;", "pm.expect(review.rating).to.be.within(1, 5);", "pm.collectionVariables.set('performanceReviewId', review._id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"selfReview\": \"Delivered the planned work and supported the team.\",\n  \"rating\": 4\n}" },
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
+      }
+    }
+  ]
+}

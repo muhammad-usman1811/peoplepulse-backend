@@ -1,7 +1,11 @@
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const Department = require('../models/Department');
+const Designation = require('../models/Designation');
+const Location = require('../models/Location');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
+const AppError = require('../utils/appError');
+const validateManager = require('../utils/managerValidation');
 
 const adminRoles = ['superadmin', 'admin', 'hr'];
 
@@ -26,6 +30,20 @@ const profileFields = (user) => ({
 
 const loadProfile = (id) =>
   User.findById(id).populate('manager', 'name email employeeId');
+
+const referenceModels = { department: Department, designation: Designation, location: Location };
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const validateReference = async (field, value) => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new AppError(`${field} must be a non-empty string`, 400);
+  }
+  const record = await referenceModels[field].findOne({
+    name: new RegExp(`^${escapeRegex(value.trim())}$`, 'i'),
+  }).select('name').lean();
+  if (!record) return null;
+  return record.name;
+};
 
 exports.getProfile = async (req, res, next) => {
   try {
@@ -65,20 +83,18 @@ exports.updateProfile = async (req, res, next) => {
           updates.employeeId = normalizedEmployeeId;
         }
       }
-      if (department !== undefined) updates.department = department;
-      if (designation !== undefined) updates.designation = designation;
+      if (department !== undefined) {
+        const value = await validateReference('department', department);
+        if (!value) return ApiResponse.error(res, 'department does not exist', null, 400);
+        updates.department = value;
+      }
+      if (designation !== undefined) {
+        const value = await validateReference('designation', designation);
+        if (!value) return ApiResponse.error(res, 'designation does not exist', null, 400);
+        updates.designation = value;
+      }
       if (manager !== undefined) {
-        if (manager === null || manager === '') {
-          updates.manager = null;
-        } else if (!mongoose.isValidObjectId(manager)) {
-          return ApiResponse.error(res, 'Manager must be a valid user ID', null, 400);
-        } else if (String(manager) === String(req.user._id)) {
-          return ApiResponse.error(res, 'A user cannot be their own manager', null, 400);
-        } else if (!(await User.exists({ _id: manager, isActive: true }))) {
-          return ApiResponse.error(res, 'Selected manager does not exist or is inactive', null, 400);
-        } else {
-          updates.manager = manager;
-        }
+        updates.manager = await validateManager(manager, req.user._id);
       }
     }
 
@@ -109,8 +125,8 @@ exports.changePassword = async (req, res, next) => {
     if (!currentPassword || !newPassword) {
       return ApiResponse.error(res, 'Current password and new password are required', null, 400);
     }
-    if (newPassword.length < 6 || newPassword.length > 128) {
-      return ApiResponse.error(res, 'New password must be between 6 and 128 characters', null, 400);
+    if (newPassword.length < 6 || newPassword.length > 72) {
+      return ApiResponse.error(res, 'New password must be between 6 and 72 characters', null, 400);
     }
 
     const user = await User.findById(req.user._id).select('+password');

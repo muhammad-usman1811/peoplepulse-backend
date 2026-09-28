@@ -94,39 +94,16 @@ async function runTests() {
     body: JSON.stringify({ email: testEmail }),
   });
   const forgotData = await forgotRes.json();
+  if (forgotRes.status === 503 && !process.env.EMAIL_USER) {
+    console.log('⚠️ Forgot password email delivery skipped because SMTP credentials are not configured.');
+    return;
+  }
   assert.strictEqual(forgotRes.status, 200, 'Forgot password should return 200');
-  const resetToken = forgotData.data.resetToken;
-  assert(resetToken, 'Should receive reset token');
-  console.log(`✅ Password reset token generated: ${resetToken.substring(0, 15)}...\n`);
-
-  // 8. Reset password PUT /api/auth/reset-password/:resetToken
-  console.log('Test 8: Reset password with token PUT /api/auth/reset-password/:token');
-  const resetRes = await fetch(`${baseUrl}/auth/reset-password/${resetToken}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: 'BrandNewPassword456!' }),
-  });
-  const resetData = await resetRes.json();
-  assert.strictEqual(resetRes.status, 200, 'Password reset should return 200');
-  console.log('✅ Password successfully reset!\n');
-
-  // 9. Login with new password
-  console.log('Test 9: Verify login with new password POST /api/auth/login');
-  const newLoginRes = await fetch(`${baseUrl}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: testEmail,
-      password: 'BrandNewPassword456!',
-    }),
-  });
-  const newLoginData = await newLoginRes.json();
-  assert.strictEqual(newLoginRes.status, 200, 'Login with new password should return 200');
-  assert.strictEqual(newLoginData.success, true);
-  console.log('✅ Login with updated password verified!\n');
+  assert.strictEqual(forgotData.data.resetToken, undefined, 'Reset token must never be returned by the API');
+  console.log('✅ Forgot password response does not expose the reset token. Configure SMTP for end-to-end email delivery testing.\n');
 
   console.log('=======================================================');
-  console.log('🎉 ALL 9 TEST SUITES PASSED FLAWLESSLY!');
+  console.log('🎉 API TEST SUITES PASSED!');
   console.log('=======================================================');
 }
 
