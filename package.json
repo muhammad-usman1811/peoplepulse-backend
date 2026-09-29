@@ -10,7 +10,8 @@
     "backfill:search-index": "node src/scripts/backfillNameSearchTokens.js",
     "test:leave-wfh": "node test-leave-wfh.js",
     "test": "cross-env NODE_ENV=test node src/test_api.js",
-    "test:employee": "node test-employee-crud.js"
+    "test:employee": "node test-employee-crud.js",
+    "test:audit": "node test-audit.js"
   },
   "keywords": [
     "nodejs",
@@ -32,6 +33,7 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
+    "luxon": "^3.7.2",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
     "nodemailer": "^10.0.10",
@@ -39,7 +41,7 @@
     "validator": "^13.12.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.2",
-    "cross-env": "^7.0.3"
+    "cross-env": "^7.0.3",
+    "nodemon": "^3.1.2"
   }
 }

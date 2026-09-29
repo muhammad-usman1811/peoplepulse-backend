@@ -2,19 +2,28 @@ const validator = require('validator');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
-const { sendResetPasswordEmail } = require('../utils/sendEmail');
+const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
 
 /**
  * @desc    Register a new user
  * @route   POST /api/auth/register
- * @access  Public (or Super Admin protected if configured)
+ * @access  Super Admin, Admin, or HR
  */
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, department, designation } = req.body;
 
     // Validate presence
-    if (typeof name !== 'string' || !name.trim() || name.trim().length > 120 || !email || !validator.isEmail(String(email).trim()) || !password || password.length < 6 || password.length > 72) {
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      name.trim().length > 120 ||
+      typeof email !== 'string' ||
+      !validator.isEmail(email.trim()) ||
+      typeof password !== 'string' ||
+      password.length < 6 ||
+      password.length > 72
+    ) {
       return ApiResponse.error(
         res,
         'Please provide a valid work email and a password between 6 and 72 characters',
@@ -24,7 +33,8 @@ exports.register = async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return ApiResponse.error(
         res,
@@ -37,7 +47,7 @@ exports.register = async (req, res, next) => {
     // Create user (name encrypted, password hashed in pre-save hook)
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password,
       role: 'employee',
       department: department || 'General',
@@ -183,20 +193,39 @@ exports.forgotPassword = async (req, res, next) => {
     const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
     const resetUrl = `${frontendUrl.replace(/\/$/, '')}/reset-password.html?token=${resetToken}`;
 
-    try {
-      await sendResetPasswordEmail(user.email, resetUrl);
-    } catch (emailError) {
-      console.error('[Email] Password reset email could not be sent:', emailError);
+    if (isEmailConfigured()) {
+      try {
+        await sendResetPasswordEmail(user.email, resetUrl);
+      } catch (emailError) {
+        // Roll back the token so the user isn't left with a dead-end reset
+        // link that was never delivered, and let them retry.
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save({ validateBeforeSave: false });
+        console.error('[Email] Password reset email could not be sent:', emailError.message);
+        return ApiResponse.error(res, 'Password reset email could not be sent. Please try again later.', null, 502);
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      // Never leak the reset token in the response on a real deployment —
+      // fail closed instead of falling back to the dev-only behavior below.
       user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
       await user.save({ validateBeforeSave: false });
-      return ApiResponse.error(res, 'Password reset email service is temporarily unavailable', null, 503);
+      return ApiResponse.error(res, 'Password reset is temporarily unavailable. Please contact an administrator.', null, 503);
+    }
+
+    const responseData = { expiresInMinutes: 30 };
+    if (process.env.NODE_ENV !== 'production') {
+      // Email isn't configured (or NODE_ENV isn't production) — return the
+      // link directly so local/dev environments keep working without SMTP.
+      responseData.resetUrl = resetUrl;
+      responseData.resetToken = resetToken;
     }
 
     return ApiResponse.success(
       res,
       'Password reset link generated successfully',
-      { expiresInMinutes: 30 }
+      responseData
     );
   } catch (err) {
     next(err);

@@ -13,9 +13,11 @@ const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const orgRoutes = require('./routes/orgRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const payrollRoutes = require('./routes/payrollRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const { leaveRoutes, wfhRoutes } = require('./routes/requestRoutes');
 const performanceRoutes = require('./routes/performanceRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
@@ -28,6 +30,7 @@ validateSecurityConfig();
 connectDB();
 
 const app = express();
+if (process.env.VERCEL) app.set('trust proxy', 1);
 
 // Security HTTP headers
 // The Swagger UI page loads its scripts/styles from cdn.jsdelivr.net (see /api-docs below)
@@ -44,15 +47,42 @@ app.use(
 );
 
 // Cross-Origin Resource Sharing (CORS) setup for React Web & Flutter Mobile
+const defaultAllowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
+];
+
 const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(',').map((url) => url.trim())
-  : ['http://localhost:3000', 'http://localhost:5173'];
+  ? process.env.CLIENT_URL.split(',').map((url) => url.trim()).filter(Boolean)
+  : defaultAllowedOrigins;
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  const normalizedOrigin = origin.replace(/\/$/, '');
+  if (allowedOrigins.includes(normalizedOrigin)) {
+    return true;
+  }
+
+  try {
+    const { hostname, protocol } = new URL(normalizedOrigin);
+    return (
+      ['localhost', '127.0.0.1', '::1'].includes(hostname) &&
+      ['http:', 'https:'].includes(protocol)
+    );
+  } catch {
+    return false;
+  }
+};
 
 const corsOptions = {
   origin: function (origin, callback) {
     // Mobile apps (Flutter / React Native) and curl/Postman usually have no origin header
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+    if (!origin || isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Blocked by CORS policy'));
@@ -73,7 +103,7 @@ if (process.env.NODE_ENV !== 'test') {
 // Body parsers
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Swagger Interactive API Documentation UI
 // Assets load from a CDN because swagger-ui-express static files are not bundled on Vercel
@@ -111,10 +141,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/org', orgRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/payroll', payrollRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/leave-requests', leaveRoutes);
 app.use('/api/wfh-requests', wfhRoutes);
 app.use('/api/performance', performanceRoutes);
+app.use('/api/audit-log', auditLogRoutes);
 
 // 404 Route Not Found Handler
 app.use((req, res) => {

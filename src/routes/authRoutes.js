@@ -7,7 +7,8 @@ const {
   resetPassword,
   getMe,
 } = require('../controllers/authController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
+const { forgotPasswordLimiter } = require('../utils/rateLimiter');
 
 const router = express.Router();
 
@@ -23,23 +24,23 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const registrationLimiter = rateLimit({
+const resetPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 5,
   message: {
     success: false,
-    message: 'Too many registration attempts from this IP, please try again later',
+    message: 'Too many password reset attempts from this IP, please try again after 15 minutes',
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 // Routes
-router.post('/register', registrationLimiter, register);
+router.post('/register', protect, authorize('superadmin', 'admin', 'hr'), register);
 router.post('/login', authLimiter, login);
-router.post('/forgot-password', authLimiter, forgotPassword);
-router.post('/reset-password', authLimiter, resetPassword);
-router.put('/reset-password/:resetToken', authLimiter, resetPassword);
+router.post('/forgot-password', forgotPasswordLimiter, resetPasswordLimiter, forgotPassword);
+router.post('/reset-password', resetPasswordLimiter, resetPassword);
+router.put('/reset-password/:resetToken', resetPasswordLimiter, resetPassword);
 router.get('/me', protect, getMe);
 
 module.exports = router;

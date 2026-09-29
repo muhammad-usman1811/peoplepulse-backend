@@ -2,12 +2,9 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { encrypt, decrypt, hashToken } = require('../utils/cryptoUtils');
+const { encrypt, decrypt, hashToken, isEncryptedValue } = require('../utils/cryptoUtils');
 const { buildNameSearchTokens } = require('../utils/searchIndex');
 const { getJwtSecret } = require('../config/security');
-
-const isEncryptedName = (value) => typeof value === 'string'
-  && /^[0-9a-f]{32}:[0-9a-f]{32}:[0-9a-f]+$/i.test(value);
 
 const UserSchema = new mongoose.Schema(
   {
@@ -17,7 +14,7 @@ const UserSchema = new mongoose.Schema(
       trim: true,
       maxlength: [120, 'Name must not exceed 120 characters'],
       // Field-level AES-256 encryption at rest
-      set: (val) => (val && !isEncryptedName(val) ? encrypt(val) : val),
+      set: (val) => (val && !isEncryptedValue(val) ? encrypt(val) : val),
       get: (val) => (val ? decrypt(val) : val),
     },
     nameSearchTokens: {
@@ -170,5 +167,7 @@ UserSchema.methods.getResetPasswordToken = function () {
 
 UserSchema.index({ role: 1, isActive: 1, createdAt: -1 });
 UserSchema.index({ nameSearchTokens: 1 });
+UserSchema.index({ manager: 1, role: 1, isActive: 1 });
+UserSchema.index({ resetPasswordToken: 1, resetPasswordExpire: 1 });
 
 module.exports = mongoose.model('User', UserSchema);
