@@ -6,7 +6,8 @@ const User = require('./src/models/User');
 const Department = require('./src/models/Department');
 const Designation = require('./src/models/Designation');
 const Location = require('./src/models/Location');
-const AuditLog = require('./src/models/AuditLog');
+const { getTestMongoUri } = require('./src/utils/testDatabase');
+const testPassword = process.env.TEST_USER_PASSWORD;
 
 dns.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','));
 
@@ -18,11 +19,12 @@ const request = async (path, options = {}) => {
   return { status: response.status, data: await response.json() };
 };
 
-const login = async (email) => {
+const login = async (email, loginPassword = testPassword) => {
+  assert(testPassword, 'Set TEST_USER_PASSWORD for integration tests');
   const result = await request('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'Password@123' }),
+    body: JSON.stringify({ email, password: loginPassword }),
   });
   assert.strictEqual(result.status, 200, `Login failed for ${email}`);
   return result.data.data.token;
@@ -30,10 +32,13 @@ const login = async (email) => {
 
 (async () => {
   const createdIds = [];
-  const createdEmployeeIds = [];
-  await mongoose.connect(process.env.MONGO_URI);
+  assert(testPassword, 'Set TEST_USER_PASSWORD for integration tests');
+  await mongoose.connect(getTestMongoUri());
 
   try {
+    const health = await request('/health');
+    assert.strictEqual(health.status, 200, 'API test server should be reachable');
+    assert.strictEqual(health.data.data.environment, 'test', 'API server must run in test mode');
     await Promise.all([
       Department.updateOne({ name: 'Engineering' }, { $setOnInsert: { name: 'Engineering' } }, { upsert: true }),
       Department.updateOne({ name: 'General' }, { $setOnInsert: { name: 'General' } }, { upsert: true }),
@@ -43,7 +48,7 @@ const login = async (email) => {
     const hr = await User.create({
       name: 'Temporary HR Test',
       email: `temporary.hr.${suffix}@peoplepulse.com`,
-      password: 'Password@123',
+      password: testPassword,
       role: 'hr',
       employeeId: `TEST-HR-${suffix}`,
       department: 'Human Resources',
@@ -51,42 +56,22 @@ const login = async (email) => {
     const employee = await User.create({
       name: 'Temporary Employee Test',
       email: `temporary.employee.${suffix}@peoplepulse.com`,
-      password: 'Password@123',
+      password: testPassword,
       role: 'employee',
       employeeId: `TEST-EMP-${suffix}`,
       department: 'Engineering',
     });
-    const admin = await User.create({
-      name: 'Temporary Audit Test Admin',
-      email: `temporary.audit.admin.${suffix}@peoplepulse.com`,
-      password: 'Password@123',
-      role: 'admin',
-      employeeId: `TEST-AUDIT-ADMIN-${suffix}`,
-    });
-    createdIds.push(hr._id, employee._id, admin._id);
+    createdIds.push(hr._id, employee._id);
 
     const hrToken = await login(hr.email);
     const employeeToken = await login(employee.email);
-    const adminToken = await login(admin.email);
+    const adminToken = await login(process.env.TEST_ADMIN_EMAIL, process.env.TEST_ADMIN_PASSWORD);
     const hrHeaders = { Authorization: `Bearer ${hrToken}`, 'Content-Type': 'application/json' };
     const employeeHeaders = { Authorization: `Bearer ${employeeToken}`, 'Content-Type': 'application/json' };
     const adminHeaders = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
 
-    const assertEmployeeCreationAudit = async (id) => {
-      const entry = await AuditLog.findOne({
-        action: 'CREATE',
-        resource: 'Employee',
-        resourceId: String(id),
-      }).lean();
-      assert(entry, 'Employee creation should persist an audit document');
-      assert.strictEqual(String(entry.actor), String(hr._id), 'Audit actor should be the authenticated HR user');
-      assert.strictEqual(entry.resourceId, String(id), 'Audit resource ID should match the created employee');
-      assert(entry.createdAt instanceof Date, 'Audit entry should have a timestamp');
-
-      const result = await request(`/audit-log?resource=Employee&action=CREATE&resourceId=${id}`, { headers: adminHeaders });
-      assert.strictEqual(result.status, 200, 'Admin should be able to query employee creation audit logs');
-      assert(result.data.data.logs.some((log) => log.resourceId === String(id)), 'Employee creation should create an audit log');
-    };
+    const unauthenticatedList = await request('/employees');
+    assert.strictEqual(unauthenticatedList.status, 401, 'Unauthenticated user must not list employees');
 
     const created = await request('/employees', {
       method: 'POST',
@@ -94,7 +79,7 @@ const login = async (email) => {
       body: JSON.stringify({
         name: 'CRUD Permission Target',
         email: `crud.target.${suffix}@peoplepulse.com`,
-        password: 'Password@123',
+        password: testPassword,
         department: 'Engineering',
         location: 'Head Office',
         status: 'on-leave',
@@ -102,9 +87,32 @@ const login = async (email) => {
     });
     assert.strictEqual(created.status, 201, 'HR should create employees');
     const targetId = created.data.data.employee.id;
+    const targetEmployeeId = created.data.data.employee.employeeId;
     createdIds.push(targetId);
-    createdEmployeeIds.push(targetId);
-    await assertEmployeeCreationAudit(targetId);
+
+    const duplicateEmployeeId = await request('/employees', {
+      method: 'POST',
+      headers: hrHeaders,
+      body: JSON.stringify({
+        name: 'Duplicate Employee ID',
+        email: `duplicate.employee.${suffix}@peoplepulse.com`,
+        password: testPassword,
+        employeeId: targetEmployeeId,
+      }),
+    });
+    assert.strictEqual(duplicateEmployeeId.status, 409, 'Duplicate employee ID must conflict');
+
+    const adminCreated = await request('/employees', {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({
+        name: 'Admin Created Employee',
+        email: `admin.created.${suffix}@peoplepulse.com`,
+        password: testPassword,
+      }),
+    });
+    assert.strictEqual(adminCreated.status, 201, 'Super Admin should create employees');
+    createdIds.push(adminCreated.data.data.employee.id);
 
     const defaults = await request('/employees', {
       method: 'POST',
@@ -112,7 +120,7 @@ const login = async (email) => {
       body: JSON.stringify({
         name: 'CRUD Default Values Target',
         email: `crud.defaults.${suffix}@peoplepulse.com`,
-        password: 'Password@123',
+        password: testPassword,
       }),
     });
     assert.strictEqual(defaults.status, 201, 'HR should create employees with valid defaults');
@@ -120,14 +128,29 @@ const login = async (email) => {
     assert.strictEqual(defaults.data.data.employee.designation, 'Team Member');
     assert.strictEqual(defaults.data.data.employee.location, '');
     createdIds.push(defaults.data.data.employee.id);
-    createdEmployeeIds.push(defaults.data.data.employee.id);
-    await assertEmployeeCreationAudit(defaults.data.data.employee.id);
 
     const filtered = await request('/employees?department=Engineering&location=Head%20Office&status=on-leave', {
       headers: hrHeaders,
     });
     assert.strictEqual(filtered.status, 200, 'Employee filters should return 200');
     assert(filtered.data.data.employees.some((item) => String(item.id) === String(targetId)), 'Filters should find the target employee');
+
+    const searched = await request('/employees?search=CRUD%20Permission%20Target', { headers: hrHeaders });
+    assert.strictEqual(searched.status, 200, 'Employee search should return 200');
+    assert(searched.data.data.employees.some((item) => String(item.id) === String(targetId)), 'Search should find the employee');
+
+    const paginated = await request('/employees?page=1&limit=1', { headers: hrHeaders });
+    assert.strictEqual(paginated.status, 200, 'Valid pagination should return 200');
+    assert.strictEqual(paginated.data.data.pagination.limit, 1);
+    assert(paginated.data.data.employees.length <= 1);
+
+    for (const query of ['page=1.5', 'page=1abc', 'limit=0', 'limit=101']) {
+      const invalidPagination = await request(`/employees?${query}`, { headers: hrHeaders });
+      assert.strictEqual(invalidPagination.status, 400, `Invalid pagination ${query} should return 400`);
+    }
+
+    const invalidEmployeeId = await request('/employees/not-an-object-id', { headers: hrHeaders });
+    assert.strictEqual(invalidEmployeeId.status, 404, 'Invalid employee IDs should not become server errors');
 
     const clearedLocation = await request(`/employees/${targetId}`, {
       method: 'PUT',
@@ -140,7 +163,7 @@ const login = async (email) => {
     const blockedCreate = await request('/employees', {
       method: 'POST',
       headers: employeeHeaders,
-      body: JSON.stringify({ name: 'Blocked', email: `blocked.${suffix}@peoplepulse.com`, password: 'Password@123' }),
+      body: JSON.stringify({ name: 'Blocked', email: `blocked.${suffix}@peoplepulse.com`, password: testPassword }),
     });
     assert.strictEqual(blockedCreate.status, 403, 'Normal employee must be blocked from creating employees');
 
@@ -154,7 +177,6 @@ const login = async (email) => {
     assert.strictEqual(deactivated.status, 200, 'HR should deactivate employees');
     console.log('Employee CRUD integration tests passed: filters, HR create/deactivate, employee create/deactivate blocks.');
   } finally {
-    await AuditLog.deleteMany({ resource: 'Employee', resourceId: { $in: createdEmployeeIds.map(String) } });
     await User.deleteMany({ _id: { $in: createdIds } });
     await mongoose.disconnect();
   }

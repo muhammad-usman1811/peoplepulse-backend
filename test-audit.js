@@ -10,16 +10,22 @@ const request = async (path, options = {}) => {
 };
 
 async function testAuditFlow() {
+  assert(process.env.TEST_ADMIN_EMAIL && process.env.TEST_ADMIN_PASSWORD, 'Set test-admin credentials before running integration tests');
   console.log('🧪 Starting Audit Log End-to-End Test...\n');
 
-  // 1. Log in as Super Admin
+  // 1. Confirm this test targets an isolated test-mode API
+  const healthRes = await request('/health');
+  assert.strictEqual(healthRes.status, 200, 'API test server should be reachable');
+  assert.strictEqual(healthRes.data.data.environment, 'test', 'API server must run in test mode');
+
+  // 2. Log in as the test Super Admin
   console.log('Step 1: Logging in as Super Admin...');
   const loginRes = await request('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'admin@peoplepulse.com',
-      password: 'Password@123',
+      email: process.env.TEST_ADMIN_EMAIL,
+      password: process.env.TEST_ADMIN_PASSWORD,
     }),
   });
 

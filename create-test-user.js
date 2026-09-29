@@ -1,11 +1,15 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const connectDB = require('./config/db');
-const User = require('./models/User');
+const connectDB = require('./src/config/db');
+const User = require('./src/models/User');
 const bcrypt = require('bcryptjs');
+const { getTestMongoUri } = require('./src/utils/testDatabase');
 
 const createTestUser = async () => {
   try {
+    process.env.MONGO_URI = getTestMongoUri();
+    const testPassword = process.env.TEST_USER_PASSWORD;
+    if (!testPassword) throw new Error('TEST_USER_PASSWORD must be set for test user creation');
     await connectDB();
 
     const targetEmail = process.argv[2] || 'testuser@gmail.com';
@@ -15,7 +19,7 @@ const createTestUser = async () => {
     if (user) {
       console.log(`User already exists in MongoDB: ${cleanEmail}`);
     } else {
-      const hashedPassword = await bcrypt.hash('initialPassword123', 10);
+      const hashedPassword = await bcrypt.hash(testPassword, 12);
       user = await User.create({
         name: 'Test User',
         email: cleanEmail,

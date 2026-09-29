@@ -6,6 +6,10 @@
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "testAdminEmail", "value": "admin@peoplepulse.com" },
+    { "key": "testAdminPassword", "value": "replace-with-test-admin-password" },
+    { "key": "testEmployeeEmail", "value": "employee@example.com" },
+    { "key": "testUserPassword", "value": "replace-with-test-user-password" },
     { "key": "employeeToken", "value": "" },
     { "key": "managerToken", "value": "" },
     { "key": "createdEmployeeId", "value": "" },
@@ -23,7 +27,7 @@
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"sarah.connor@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{testEmployeeEmail}}\",\n  \"password\": \"{{testUserPassword}}\"\n}" },
         "url": "{{baseUrl}}/auth/login"
       }
     },
@@ -33,7 +37,7 @@
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{testAdminEmail}}\",\n  \"password\": \"{{testAdminPassword}}\"\n}" },
         "url": "{{baseUrl}}/auth/login"
       }
     },
