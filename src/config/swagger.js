@@ -18,10 +18,6 @@ const swaggerDocument = {
       url: 'http://localhost:5000/api',
       description: 'Localhost Development Server',
     },
-    {
-      url: 'http://192.168.5.31:5000/api',
-      description: 'Shared Wi-Fi Network Server (for Mobile & Web Teammates)',
-    },
   ],
   components: {
     securitySchemes: {
@@ -29,14 +25,14 @@ const swaggerDocument = {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Enter your JWT token obtained from /auth/login or /auth/register',
+        description: 'Enter your JWT token obtained from /auth/login',
       },
     },
   },
   paths: {
     '/health': {
       get: {
-        summary: 'Check API and Database Health',
+        summary: 'Check API Liveness',
         tags: ['System'],
         responses: {
           200: {
@@ -69,8 +65,8 @@ const swaggerDocument = {
                     type: 'string',
                     format: 'password',
                     minLength: 6,
-                    maxLength: 128,
-                    example: 'Password@123',
+                    maxLength: 72,
+                    example: 'StrongPassword123',
                   },
                 },
               },
@@ -166,8 +162,8 @@ const swaggerDocument = {
                 type: 'object',
                 required: ['currentPassword', 'newPassword'],
                 properties: {
-                  currentPassword: { type: 'string', format: 'password', example: 'Password@123' },
-                  newPassword: { type: 'string', format: 'password', minLength: 6, example: 'NewPassword@123' },
+                  currentPassword: { type: 'string', format: 'password', example: 'CurrentPassword123' },
+                  newPassword: { type: 'string', format: 'password', minLength: 6, maxLength: 72, example: 'NewPassword123' },
                 },
               },
             },
@@ -643,6 +639,12 @@ const swaggerDocument = {
           { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'on-leave'] } },
           { name: 'isActive', in: 'query', schema: { type: 'boolean' } },
         ],
+        responses: {
+          200: { description: 'Employees retrieved with pagination metadata' },
+          400: { description: 'Invalid pagination or filter values' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+        },
       },
       post: {
         summary: 'Create Employee',
@@ -654,13 +656,21 @@ const swaggerDocument = {
             type: 'object', required: ['name', 'email', 'password'],
             properties: {
               name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email' },
-              password: { type: 'string', minLength: 6 }, employeeId: { type: 'string' },
+              password: { type: 'string', minLength: 6, maxLength: 72 }, employeeId: { type: 'string', maxLength: 64 },
+              phoneNumber: { type: 'string', maxLength: 30, example: '+92 300 1234567' },
               department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
+              manager: { type: 'string', nullable: true },
               status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
             },
           } } },
         },
-        responses: { 201: { description: 'Employee created successfully' }, 403: { description: 'HR/Admin role required' } },
+        responses: {
+          201: { description: 'Employee created successfully' },
+          400: { description: 'Invalid employee fields or references' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          409: { description: 'Email or employee ID already exists' },
+        },
       },
     },
     '/employees/{id}': {
@@ -673,14 +683,14 @@ const swaggerDocument = {
         summary: 'Update Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', properties: { department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, isActive: { type: 'boolean' } },
+          type: 'object', properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, isActive: { type: 'boolean' } },
         } } } },
-        responses: { 200: { description: 'Employee updated successfully' }, 403: { description: 'HR/Admin role required' } },
+        responses: { 200: { description: 'Employee updated successfully' }, 400: { description: 'Invalid employee fields' }, 401: { description: 'Authentication required' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' }, 409: { description: 'Employee ID already exists' } },
       },
       delete: {
         summary: 'Deactivate Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Employee deactivated successfully' }, 403: { description: 'HR/Admin role required' } },
+        responses: { 200: { description: 'Employee deactivated successfully' }, 400: { description: 'Cannot deactivate your own account' }, 401: { description: 'Authentication required' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' } },
       },
     },
     '/leave-requests': {
@@ -799,6 +809,8 @@ const swaggerDocument = {
                 properties: {
                   period: { type: 'string', example: '2026-Q4' },
                   status: { type: 'string', enum: ['open', 'closed'], example: 'open' },
+                  startDate: { type: 'string', format: 'date', description: 'Optional; provide together with endDate' },
+                  endDate: { type: 'string', format: 'date', description: 'Optional; must be on or after startDate' },
                 },
               },
             },
@@ -823,6 +835,34 @@ const swaggerDocument = {
                 properties: {
                   selfReview: { type: 'string' },
                   rating: { type: 'integer', minimum: 1, maximum: 5 },
+                  goals: {
+                    type: 'array',
+                    maxItems: 20,
+                    items: {
+                      type: 'object',
+                      required: ['title'],
+                      properties: {
+                        title: { type: 'string', maxLength: 200 },
+                        description: { type: 'string', maxLength: 1000 },
+                        status: { type: 'string', enum: ['not_started', 'in_progress', 'completed'] },
+                        kpis: {
+                          type: 'array',
+                          maxItems: 20,
+                          items: {
+                            type: 'object',
+                            required: ['name', 'target'],
+                            properties: {
+                              name: { type: 'string', maxLength: 120 },
+                              target: { type: 'number' },
+                              actual: { type: 'number', nullable: true },
+                              unit: { type: 'string', maxLength: 40 },
+                              weight: { type: 'number', minimum: 0, maximum: 100 },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -831,12 +871,102 @@ const swaggerDocument = {
         responses: { 201: { description: 'Self-review submitted' }, 400: { description: 'Invalid review or rating' }, 404: { description: 'Open cycle not found' }, 409: { description: 'Review already submitted' } },
       },
     },
+    '/performance/team/reviews': {
+      get: {
+        summary: 'List Reviews for the Authenticated Manager Direct Reports',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+        ],
+        responses: {
+          200: { description: 'Reviews for direct reports, with pagination metadata' },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
+    '/performance/reviews/{reviewId}': {
+      get: {
+        summary: 'Get a Performance Review You Are Allowed to View',
+        description: 'Accessible only to the employee on the review, their current direct manager, or HR/admin roles.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'reviewId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Authorized review retrieved' },
+          401: { description: 'Authentication required' },
+          403: { description: 'You are not authorized to view this review' },
+          404: { description: 'Review not found' },
+        },
+      },
+    },
+    '/performance/reviews/{reviewId}/manager-review': {
+      put: {
+        summary: 'Submit or Update Manager Review and Rating',
+        description: 'Allows the assigned manager of the employee (or HR/Admin) to submit feedback, score/rating, and update KPI assessments for an open performance cycle.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'reviewId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['managerReview'],
+                properties: {
+                  managerReview: { type: 'string', maxLength: 5000, example: 'Excellent performance and project leadership.' },
+                  rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                  managerRating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                  goals: {
+                    type: 'array',
+                    maxItems: 20,
+                    items: {
+                      type: 'object',
+                      required: ['title'],
+                      properties: {
+                        title: { type: 'string', maxLength: 200 },
+                        description: { type: 'string', maxLength: 1000 },
+                        status: { type: 'string', enum: ['not_started', 'in_progress', 'completed'] },
+                        kpis: {
+                          type: 'array',
+                          maxItems: 20,
+                          items: {
+                            type: 'object',
+                            required: ['name', 'target'],
+                            properties: {
+                              name: { type: 'string', maxLength: 120 },
+                              target: { type: 'number' },
+                              actual: { type: 'number', nullable: true },
+                              unit: { type: 'string', maxLength: 40 },
+                              weight: { type: 'number', minimum: 0, maximum: 100 },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Manager review submitted successfully' },
+          400: { description: 'Invalid review payload or closed cycle' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Only assigned manager or HR can submit manager review' },
+          404: { description: 'Review not found' },
+        },
+      },
+    },
     '/auth/forgot-password': {
       post: {
         summary: 'Request Password Reset Link',
         description:
           'Sends a reset link through email when SMTP is configured. The raw token is never returned by the API. ' +
-          'Always returns a generic success message for an unknown email to avoid revealing registered addresses.',
+          'Always returns the same generic success response for known and unknown addresses, including delivery/configuration failures.',
         tags: ['Authentication'],
         requestBody: {
           required: true,
@@ -857,14 +987,10 @@ const swaggerDocument = {
         },
         responses: {
           200: {
-            description:
-              'Either "reset link emailed" (no data) or, when email delivery is not configured, "link generated" with resetUrl/resetToken/expiresInMinutes in data.',
+            description: 'Generic success response; no reset token or URL is returned.',
           },
           400: {
             description: 'Email address missing from request body',
-          },
-          502: {
-            description: 'Email delivery is configured but sending the reset email failed',
           },
         },
       },
@@ -897,8 +1023,8 @@ const swaggerDocument = {
                   password: {
                     type: 'string',
                     minLength: 6,
-                    maxLength: 128,
-                    example: 'NewSecurePassword@123',
+                    maxLength: 72,
+                    example: 'NewSecurePassword123',
                   },
                 },
               },
@@ -928,7 +1054,7 @@ const swaggerDocument = {
                 required: ['token', 'password'],
                 properties: {
                   token: { type: 'string' },
-                  password: { type: 'string', minLength: 6, maxLength: 128, example: 'NewSecurePassword@123' },
+                  password: { type: 'string', minLength: 6, maxLength: 72, example: 'NewSecurePassword@123' },
                 },
               },
             },
@@ -942,8 +1068,8 @@ const swaggerDocument = {
     },
     '/auth/register': {
       post: {
-        summary: 'Register New Corporate User',
-        description: 'Creates a new user with encrypted personal data and hashed password.',
+        summary: 'Admin/HR Creates an Employee Account',
+        description: 'Creates an employee account for an authenticated superadmin, admin, or HR user. The created employee must log in separately; no employee token is returned.',
         tags: ['Authentication'],
         security: [{ BearerAuth: [] }],
         requestBody: {
@@ -956,7 +1082,7 @@ const swaggerDocument = {
                 properties: {
                   name: { type: 'string', example: 'Alex Johnson' },
                   email: { type: 'string', example: 'alex.johnson@peoplepulse.com' },
-                  password: { type: 'string', minLength: 6, maxLength: 128, example: 'NewSecurePassword@123' },
+                  password: { type: 'string', minLength: 6, maxLength: 72, example: 'NewSecurePassword123' },
                   department: { type: 'string', example: 'Product Engineering' },
                   designation: { type: 'string', example: 'Software Engineer' },
                 },
@@ -966,7 +1092,7 @@ const swaggerDocument = {
         },
         responses: {
           201: {
-            description: 'User created successfully',
+            description: 'Employee account created successfully; no authentication token is returned.',
           },
           401: { description: 'Authentication required' },
           403: { description: 'Only admin, HR, or superadmin can register employees' },
@@ -1064,7 +1190,7 @@ const swaggerDocument = {
           { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 }, description: 'Page number' },
           { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 }, description: 'Results per page (max 100)' },
           { in: 'query', name: 'actor', schema: { type: 'string' }, description: 'Filter by actor (User ObjectId)' },
-          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
+          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REJECT', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
           { in: 'query', name: 'resource', schema: { type: 'string', example: 'SalaryStructure' }, description: 'Filter by entity type' },
           { in: 'query', name: 'resourceId', schema: { type: 'string' }, description: 'Filter by specific document ID' },
           { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Start date (ISO 8601), inclusive' },
@@ -1075,6 +1201,122 @@ const swaggerDocument = {
           400: { description: 'Invalid date filter' },
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'Only superadmin and admin can view the audit log' },
+        },
+      },
+    },
+    '/reports/attendance-summary': {
+      get: {
+        summary: 'Get Attendance Summary',
+        description: 'Aggregates attendance records by status and distinct employee. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive UTC date (YYYY-MM-DD)' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive UTC date (YYYY-MM-DD)' },
+        ],
+        responses: {
+          200: {
+            description: 'Attendance summary retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        total: { type: 'integer' },
+                        employeeCount: { type: 'integer' },
+                        byStatus: { type: 'object', additionalProperties: { type: 'integer' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid date or from date after to date' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'HR/Admin role required' },
+        },
+      },
+    },
+    '/reports/leave-summary': {
+      get: {
+        summary: 'Get Leave Summary',
+        description: 'Aggregates leave requests by status and leave type. Optional date bounds filter request start dates. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive request start date (YYYY-MM-DD)' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive request start date (YYYY-MM-DD)' },
+        ],
+        responses: {
+          200: {
+            description: 'Leave summary retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        total: { type: 'integer' },
+                        byStatus: { type: 'object', additionalProperties: { type: 'integer' } },
+                        byType: { type: 'object', additionalProperties: { type: 'integer' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid date or from date after to date' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'HR/Admin role required' },
+        },
+      },
+    },
+    '/reports/payroll-summary': {
+      get: {
+        summary: 'Get Payroll Summary',
+        description: 'Aggregates stored salary structures and configured allowances. This API does not store payroll runs or payouts. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Payroll summary retrieved successfully; data reflects salary structures and allowances, not payroll payments',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        structureCount: { type: 'integer' },
+                        averageBasicPercentage: { type: 'number' },
+                        allowanceCount: { type: 'integer' },
+                        allowances: {
+                          type: 'object',
+                          properties: {
+                            fixed: { type: 'object', properties: { count: { type: 'integer' }, totalValue: { type: 'number' } } },
+                            percentage: { type: 'object', properties: { count: { type: 'integer' }, totalValue: { type: 'number' } } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'HR/Admin role required' },
         },
       },
     },

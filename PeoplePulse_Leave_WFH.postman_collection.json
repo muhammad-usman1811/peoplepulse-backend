@@ -6,10 +6,17 @@
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "testAdminEmail", "value": "admin@peoplepulse.com" },
+    { "key": "testAdminPassword", "value": "replace-with-test-admin-password" },
+    { "key": "testEmployeeEmail", "value": "employee@example.com" },
+    { "key": "testUserPassword", "value": "replace-with-test-user-password" },
     { "key": "employeeToken", "value": "" },
     { "key": "managerToken", "value": "" },
+    { "key": "createdEmployeeId", "value": "" },
     { "key": "leaveRequestId", "value": "" },
+    { "key": "rejectedLeaveRequestId", "value": "" },
     { "key": "wfhRequestId", "value": "" },
+    { "key": "approvedWfhRequestId", "value": "" },
     { "key": "performanceCycleId", "value": "" },
     { "key": "performanceReviewId", "value": "" }
   ],
@@ -20,7 +27,7 @@
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"sarah.connor@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{testEmployeeEmail}}\",\n  \"password\": \"{{testUserPassword}}\"\n}" },
         "url": "{{baseUrl}}/auth/login"
       }
     },
@@ -30,9 +37,24 @@
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{testAdminEmail}}\",\n  \"password\": \"{{testAdminPassword}}\"\n}" },
         "url": "{{baseUrl}}/auth/login"
       }
+    },
+    {
+      "name": "HR Create Employee",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('employee is created', function () { pm.response.to.have.status(201); });", "pm.collectionVariables.set('createdEmployeeId', pm.response.json().data.employee.id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman Audit Employee\",\n  \"email\": \"postman.audit.{{$timestamp}}@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}" },
+        "url": "{{baseUrl}}/employees"
+      }
+    },
+    {
+      "name": "Verify Employee Creation Audit",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('employee creation is audited', function () {", "  const log = pm.response.json().data.logs[0];", "  pm.expect(log.action).to.eql('CREATE');", "  pm.expect(log.resource).to.eql('Employee');", "  pm.expect(log.resourceId).to.eql(pm.collectionVariables.get('createdEmployeeId'));", "  pm.expect(log.createdAt).to.be.a('string');", "});"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/audit-log?resource=Employee&action=CREATE&resourceId={{createdEmployeeId}}" }
     },
     {
       "name": "Employee Apply Leave",
@@ -58,6 +80,44 @@
       }
     },
     {
+      "name": "Verify Leave Approval Audit",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('approval is recorded in the audit log', function () {",
+            "  const logs = pm.response.json().data.logs;",
+            "  pm.expect(logs.some((log) => log.action === 'APPROVE' && log.resource === 'LeaveRequest' && log.resourceId === pm.collectionVariables.get('leaveRequestId'))).to.eql(true);",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": "{{baseUrl}}/audit-log?resource=LeaveRequest&action=APPROVE&resourceId={{leaveRequestId}}"
+      }
+    },
+    {
+      "name": "Employee Apply Leave for Rejection",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('rejectedLeaveRequestId', pm.response.json().data.request.id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"type\": \"sick\",\n  \"startDate\": \"2026-11-05\",\n  \"endDate\": \"2026-11-05\",\n  \"reason\": \"Postman rejection audit check\"\n}" },
+        "url": "{{baseUrl}}/leave-requests"
+      }
+    },
+    {
+      "name": "Manager Reject Leave",
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"note\": \"Rejected for audit verification\"\n}" }, "url": "{{baseUrl}}/leave-requests/{{rejectedLeaveRequestId}}/reject" }
+    },
+    {
+      "name": "Verify Leave Rejection Audit",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('leave rejection is audited', function () {", "  const log = pm.response.json().data.logs[0];", "  pm.expect(log.action).to.eql('REJECT');", "  pm.expect(log.resource).to.eql('LeaveRequest');", "  pm.expect(log.resourceId).to.eql(pm.collectionVariables.get('rejectedLeaveRequestId'));", "  pm.expect(log.createdAt).to.be.a('string');", "});"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/audit-log?resource=LeaveRequest&action=REJECT&resourceId={{rejectedLeaveRequestId}}" }
+    },
+    {
       "name": "Employee Apply WFH",
       "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('wfhRequestId', pm.response.json().data.request.id);"] } }],
       "request": {
@@ -75,6 +135,59 @@
         "body": { "mode": "raw", "raw": "{\n  \"note\": \"Please use the office that day\"\n}" },
         "url": "{{baseUrl}}/wfh-requests/{{wfhRequestId}}/reject"
       }
+    },
+    {
+      "name": "Verify WFH Rejection Audit",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('rejection is recorded in the audit log', function () {",
+            "  const logs = pm.response.json().data.logs;",
+            "  pm.expect(logs.some((log) => log.action === 'REJECT' && log.resource === 'WfhRequest' && log.resourceId === pm.collectionVariables.get('wfhRequestId'))).to.eql(true);",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": "{{baseUrl}}/audit-log?resource=WfhRequest&action=REJECT&resourceId={{wfhRequestId}}"
+      }
+    },
+    {
+      "name": "Employee Apply WFH for Approval",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('approvedWfhRequestId', pm.response.json().data.request.id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"startDate\": \"2026-10-13\",\n  \"endDate\": \"2026-10-13\",\n  \"reason\": \"Postman approval audit check\"\n}" },
+        "url": "{{baseUrl}}/wfh-requests"
+      }
+    },
+    {
+      "name": "Manager Approve WFH",
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"note\": \"Approved for audit verification\"\n}" }, "url": "{{baseUrl}}/wfh-requests/{{approvedWfhRequestId}}/approve" }
+    },
+    {
+      "name": "Verify WFH Approval Audit",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('WFH approval is audited', function () {", "  const log = pm.response.json().data.logs[0];", "  pm.expect(log.action).to.eql('APPROVE');", "  pm.expect(log.resource).to.eql('WfhRequest');", "  pm.expect(log.resourceId).to.eql(pm.collectionVariables.get('approvedWfhRequestId'));", "  pm.expect(log.createdAt).to.be.a('string');", "});"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/audit-log?resource=WfhRequest&action=APPROVE&resourceId={{approvedWfhRequestId}}" }
+    },
+    {
+      "name": "Reports - Attendance Summary",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('attendance summary returns aggregated counts', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.total).to.be.a('number'); pm.expect(pm.response.json().data.byStatus).to.be.an('object'); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/reports/attendance-summary" }
+    },
+    {
+      "name": "Reports - Leave Summary",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('leave summary returns aggregated counts', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.total).to.be.a('number'); pm.expect(pm.response.json().data.byStatus).to.be.an('object'); pm.expect(pm.response.json().data.byType).to.be.an('object'); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/reports/leave-summary" }
+    },
+    {
+      "name": "Reports - Payroll Summary",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('payroll summary returns salary structure aggregates', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.structureCount).to.be.a('number'); pm.expect(pm.response.json().data.averageBasicPercentage).to.be.a('number'); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/reports/payroll-summary" }
     },
     {
       "name": "HR Create Performance Cycle",

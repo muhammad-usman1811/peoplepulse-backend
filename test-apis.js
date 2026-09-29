@@ -1,4 +1,6 @@
-const BASE_URL = 'http://localhost:5000';
+require('dotenv').config();
+
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
 async function testAllApis() {
   console.log('====================================================');
@@ -7,14 +9,19 @@ async function testAllApis() {
 
   const randomId = Math.floor(Math.random() * 10000);
   const testEmail = `testuser_${randomId}@example.com`;
-  const initialPassword = 'password123';
+  const initialPassword = process.env.TEST_USER_PASSWORD;
   const newPassword = 'myNewSecretPassword456';
+  let employeeToken;
+  if (!initialPassword) throw new Error('Set TEST_USER_PASSWORD for this test run.');
 
   // 1. Health Check
   try {
     console.log('1. Testing Health Check Endpoint: GET /api/health');
     const res = await fetch(`${BASE_URL}/api/health`);
     const data = await res.json();
+    if (data.data?.environment !== 'test') {
+      throw new Error('Refusing API tests unless the server runs with NODE_ENV=test and a dedicated *_test database.');
+    }
     console.log(`   [STATUS]: ${res.status}`);
     console.log(`   [RESPONSE]:`, data);
   } catch (err) {
@@ -24,8 +31,8 @@ async function testAllApis() {
 
   // 2. Register API
   try {
-    console.log('\n2. Testing Register API: POST /api/auth/register');
-    const res = await fetch(`${BASE_URL}/api/auth/register`, {
+    console.log('\n2. Testing anonymous registration is blocked: POST /api/auth/register');
+    const publicRes = await fetch(`${BASE_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -35,7 +42,36 @@ async function testAllApis() {
         role: 'employee',
       }),
     });
+    const publicData = await publicRes.json();
+    if (publicRes.status !== 401) throw new Error(`Expected anonymous registration to return 401; got ${publicRes.status}`);
+    console.log(`   [STATUS]: ${publicRes.status}`);
+    console.log(`   [RESPONSE]:`, publicData);
+
+    const adminEmail = process.env.TEST_ADMIN_EMAIL;
+    const adminPassword = process.env.TEST_ADMIN_PASSWORD;
+    if (!adminEmail || !adminPassword) {
+      console.log('   [SKIP]: Set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to test authorized registration and later steps.');
+      return;
+    }
+
+    const adminLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+    });
+    const adminLoginData = await adminLoginRes.json();
+    if (adminLoginRes.status !== 200) throw new Error('Admin login failed; authorized registration was not tested.');
+    const adminToken = adminLoginData.data.token;
+
+    console.log('\n3. Testing authorized registration: POST /api/auth/register');
+    const res = await fetch(`${BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ name: 'Muneeb Employee', email: testEmail, password: initialPassword }),
+    });
     const data = await res.json();
+    if (res.status !== 201) throw new Error(`Authorized registration failed with ${res.status}`);
+    if (data.data.token) throw new Error('Registration unexpectedly returned an employee token');
     console.log(`   [STATUS]: ${res.status}`);
     console.log(`   [RESPONSE]:`, data);
   } catch (err) {
@@ -56,6 +92,7 @@ async function testAllApis() {
     const data = await res.json();
     console.log(`   [STATUS]: ${res.status}`);
     console.log(`   [RESPONSE]:`, data);
+    if (res.status === 200) employeeToken = data.data.token;
   } catch (err) {
     console.error('   [ERROR]:', err.message);
   }
@@ -80,12 +117,11 @@ async function testAllApis() {
 
   // 5. Change Password API
   try {
-    console.log('\n5. Testing Change Password API: POST /api/auth/change-password');
-    const res = await fetch(`${BASE_URL}/api/auth/change-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    console.log('\n5. Testing Change Password API: PUT /api/profile/password');
+    const res = await fetch(`${BASE_URL}/api/profile/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${employeeToken}` },
       body: JSON.stringify({
-        email: testEmail,
         currentPassword: initialPassword,
         newPassword: newPassword,
       }),

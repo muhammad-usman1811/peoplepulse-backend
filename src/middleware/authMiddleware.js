@@ -54,6 +54,15 @@ const protect = async (req, res, next) => {
       );
     }
 
+    if ((decoded.tokenVersion || 0) !== (user.tokenVersion || 0)) {
+      return ApiResponse.error(
+        res,
+        'Authentication token has been revoked. Please log in again.',
+        null,
+        401
+      );
+    }
+
     req.user = user;
     next();
   } catch (err) {

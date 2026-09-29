@@ -10,16 +10,22 @@ const request = async (path, options = {}) => {
 };
 
 async function testAuditFlow() {
+  assert(process.env.TEST_ADMIN_EMAIL && process.env.TEST_ADMIN_PASSWORD, 'Set test-admin credentials before running integration tests');
   console.log('🧪 Starting Audit Log End-to-End Test...\n');
 
-  // 1. Log in as Super Admin
+  // 1. Confirm this test targets an isolated test-mode API
+  const healthRes = await request('/health');
+  assert.strictEqual(healthRes.status, 200, 'API test server should be reachable');
+  assert.strictEqual(healthRes.data.data.environment, 'test', 'API server must run in test mode');
+
+  // 2. Log in as the test Super Admin
   console.log('Step 1: Logging in as Super Admin...');
   const loginRes = await request('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'admin@peoplepulse.com',
-      password: 'Password@123',
+      email: process.env.TEST_ADMIN_EMAIL,
+      password: process.env.TEST_ADMIN_PASSWORD,
     }),
   });
 
@@ -30,6 +36,16 @@ async function testAuditFlow() {
     Authorization: `Bearer ${token}`,
   };
   console.log('✅ Logged in successfully!\n');
+
+  const unauthenticatedList = await request('/payroll/salary-structure');
+  assert.strictEqual(unauthenticatedList.status, 401, 'Salary structure reads should require authentication');
+
+  const invalidCreate = await request('/payroll/salary-structure', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ grade: `INVALID-${Date.now()}` }),
+  });
+  assert.strictEqual(invalidCreate.status, 400, 'Invalid salary structures should be rejected');
 
   // 2. Perform an audited action (Create Salary Structure)
   const testGrade = `TEST-GRADE-${Date.now()}`;
@@ -48,8 +64,16 @@ async function testAuditFlow() {
   const createdDoc = createRes.data.data.salaryStructure;
   console.log(`✅ Salary structure created with ID: ${createdDoc._id}\n`);
 
-  // Wait 500ms for async fire-and-forget audit log to persist
-  await new Promise((r) => setTimeout(r, 500));
+  const listRes = await request('/payroll/salary-structure', { headers: authHeaders });
+  assert.strictEqual(listRes.status, 200, 'Salary structure listing should return 200');
+  assert(listRes.data.data.salaryStructures.some((item) => item._id === createdDoc._id), 'Created structure should appear in the list');
+
+  const duplicateCreate = await request('/payroll/salary-structure', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ grade: testGrade, basicPercentage: 50 }),
+  });
+  assert.strictEqual(duplicateCreate.status, 409, 'Duplicate salary grades should be rejected');
 
   // 3. Query Audit Logs (GET /audit-log?resource=SalaryStructure&action=CREATE)
   console.log('Step 3: Querying audit log for CREATE action on SalaryStructure...');
@@ -88,8 +112,6 @@ async function testAuditFlow() {
   assert.strictEqual(updateRes.status, 200, 'Salary structure update should return 200');
   console.log('✅ Salary structure updated.\n');
 
-  await new Promise((r) => setTimeout(r, 500));
-
   // 6. Delete Salary Structure to trigger DELETE audit log and cleanup
   console.log('Step 6: Deleting Salary Structure to test DELETE audit...');
   const deleteRes = await request(`/payroll/salary-structure/${createdDoc._id}`, {
@@ -98,8 +120,6 @@ async function testAuditFlow() {
   });
   assert.strictEqual(deleteRes.status, 200, 'Salary structure delete should return 200');
   console.log('✅ Salary structure deleted.\n');
-
-  await new Promise((r) => setTimeout(r, 500));
 
   // 7. Verify all audit logs for this resourceId
   console.log('Step 7: Verifying complete audit trail for this resourceId...');

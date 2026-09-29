@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const AuditLog = require('../models/AuditLog');
 const ApiResponse = require('../utils/apiResponse');
 
 const requestFields = (request) => ({
@@ -127,6 +128,16 @@ const decide = async (Model, label, req, res, next, status) => {
     if (!request) {
       return ApiResponse.error(res, `Pending ${label.toLowerCase()} request not found for this manager`, null, 404);
     }
+    await AuditLog.record({
+      actor: req.user._id,
+      actorName: req.user.name || '',
+      actorRole: req.user.role || '',
+      action: status === 'approved' ? 'APPROVE' : 'REJECT',
+      resource: Model.modelName,
+      resourceId: request._id,
+      meta: { status, decisionNote: request.decisionNote, employee: request.employee },
+      req,
+    });
     const result = await populated(Model, { _id: request._id });
     return ApiResponse.success(res, `${label} request ${status} successfully`, { request: requestFields(result) });
   } catch (err) {

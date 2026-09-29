@@ -1,7 +1,11 @@
+require('dotenv').config();
 const assert = require('assert');
 
 async function runTests() {
-  const baseUrl = 'http://localhost:5000/api';
+  const baseUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api`;
+  if (!process.env.TEST_ADMIN_EMAIL || !process.env.TEST_ADMIN_PASSWORD) {
+    throw new Error('Set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD for the disposable test database.');
+  }
   console.log('🧪 Running PeoplePulse API Automated Tests...\n');
 
   // 1. Health check
@@ -10,6 +14,7 @@ async function runTests() {
   const healthData = await healthRes.json();
   assert.strictEqual(healthRes.status, 200, 'Health check should return 200');
   assert.strictEqual(healthData.success, true, 'Health check should have success: true');
+  assert.strictEqual(healthData.data.environment, 'test', 'API server must run in test mode');
   console.log('✅ Health check passed!\n');
 
   // 2. Failed login attempt
@@ -18,8 +23,8 @@ async function runTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'admin@peoplepulse.com',
-      password: 'WrongPassword!',
+    email: process.env.TEST_ADMIN_EMAIL,
+    password: `wrong-${Date.now()}-password`,
     }),
   });
   const badLoginData = await badLoginRes.json();
@@ -33,19 +38,19 @@ async function runTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'admin@peoplepulse.com',
-      password: 'Password@123',
+      email: process.env.TEST_ADMIN_EMAIL,
+      password: process.env.TEST_ADMIN_PASSWORD,
     }),
   });
   const loginData = await loginRes.json();
   assert.strictEqual(loginRes.status, 200, 'Login should return 200');
   assert.strictEqual(loginData.success, true, 'Login should succeed');
   assert(loginData.data.token, 'Should receive JWT token');
-  assert.strictEqual(loginData.data.user.email, 'admin@peoplepulse.com');
+  assert.strictEqual(loginData.data.user.email, process.env.TEST_ADMIN_EMAIL);
   assert.strictEqual(loginData.data.user.role, 'superadmin');
   assert.strictEqual(loginData.data.user.name, 'Super Administrator'); // Decrypted for API consumer
   const jwtToken = loginData.data.token;
-  console.log(`✅ Super Admin logged in successfully! Received JWT: ${jwtToken.substring(0, 25)}...\n`);
+  console.log('✅ Super Admin logged in successfully; JWT received.\n');
 
   // 4. Protected Route GET /api/auth/me without token
   console.log('Test 4: Access protected route GET /api/auth/me without token');
@@ -69,6 +74,16 @@ async function runTests() {
   // 6. User Registration POST /api/auth/register
   console.log('Test 6: Register new user POST /api/auth/register');
   const testEmail = `developer_${Date.now()}@peoplepulse.com`;
+  const publicRegRes = await fetch(`${baseUrl}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Anonymous Registration Check',
+      email: `anonymous_${Date.now()}@peoplepulse.com`,
+      password: 'MySecretPassword123!',
+    }),
+  });
+  assert.strictEqual(publicRegRes.status, 401, 'Registration without a token should return 401');
   const regRes = await fetch(`${baseUrl}/auth/register`, {
     method: 'POST',
     headers: {
@@ -87,7 +102,17 @@ async function runTests() {
   const regData = await regRes.json();
   assert.strictEqual(regRes.status, 201, 'Registration should return 201');
   assert.strictEqual(regData.data.user.email, testEmail);
+  assert.strictEqual(regData.data.token, undefined, 'Admin registration must not return the new employee token');
   console.log(`✅ New user registered successfully (${testEmail})!\n`);
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const registrationAuditRes = await fetch(
+    `${baseUrl}/audit-log?resource=User&resourceId=${regData.data.user.id}&action=CREATE`,
+    { headers: { Authorization: `Bearer ${jwtToken}` } }
+  );
+  const registrationAuditData = await registrationAuditRes.json();
+  assert.strictEqual(registrationAuditRes.status, 200, 'Admin should be able to query registration audit logs');
+  assert(registrationAuditData.data.logs.length > 0, 'Employee registration should create an audit entry');
 
   // 7. Forgot password POST /api/auth/forgot-password
   console.log('Test 7: Forgot password flow POST /api/auth/forgot-password');
@@ -102,7 +127,7 @@ async function runTests() {
     return;
   }
   assert.strictEqual(forgotRes.status, 200, 'Forgot password should return 200');
-  assert.strictEqual(forgotData.data.resetToken, undefined, 'Reset token must never be returned by the API');
+  assert.strictEqual(forgotData.data?.resetToken, undefined, 'Reset token must never be returned by the API');
   console.log('✅ Forgot password response does not expose the reset token. Configure SMTP for end-to-end email delivery testing.\n');
 
   console.log('=======================================================');

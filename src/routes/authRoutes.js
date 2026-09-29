@@ -24,6 +24,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const forgotPasswordIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: {
+    success: false,
+    message: 'If an account exists with that corporate email, a password reset link has been dispatched.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const resetPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -38,7 +49,7 @@ const resetPasswordLimiter = rateLimit({
 // Routes
 router.post('/register', protect, authorize('superadmin', 'admin', 'hr'), register);
 router.post('/login', authLimiter, login);
-router.post('/forgot-password', forgotPasswordLimiter, resetPasswordLimiter, forgotPassword);
+router.post('/forgot-password', forgotPasswordIpLimiter, forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', resetPasswordLimiter, resetPassword);
 router.put('/reset-password/:resetToken', resetPasswordLimiter, resetPassword);
 router.get('/me', protect, getMe);

@@ -3,6 +3,7 @@ const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
 const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
+const recordAudit = require('../utils/recordAudit');
 
 /**
  * @desc    Register a new user
@@ -53,14 +54,18 @@ exports.register = async (req, res, next) => {
       department: department || 'General',
       designation: designation || 'Team Member',
     });
-
-    const token = user.getSignedJwtToken();
+    recordAudit({
+      req,
+      action: 'CREATE',
+      resource: 'User',
+      resourceId: user._id,
+      meta: { source: 'admin_registration', changedFields: ['name', 'email', 'department', 'designation'] },
+    });
 
     return ApiResponse.success(
       res,
       'User registered successfully',
       {
-        token,
         user: {
           id: user._id,
           name: user.name,
@@ -120,6 +125,14 @@ exports.login = async (req, res, next) => {
     // Check if password matches
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
+      recordAudit({
+        req,
+        actor: user,
+        action: 'LOGIN',
+        resource: 'User',
+        resourceId: user._id,
+        meta: { outcome: 'failure', reason: 'invalid_credentials' },
+      });
       return ApiResponse.error(
         res,
         'Invalid corporate email or password',
@@ -130,6 +143,14 @@ exports.login = async (req, res, next) => {
 
     // Check active status
     if (!user.isActive) {
+      recordAudit({
+        req,
+        actor: user,
+        action: 'LOGIN',
+        resource: 'User',
+        resourceId: user._id,
+        meta: { outcome: 'failure', reason: 'inactive_account' },
+      });
       return ApiResponse.error(
         res,
         'Your account has been deactivated. Please contact your Super Admin.',
@@ -141,6 +162,14 @@ exports.login = async (req, res, next) => {
     // Update last login timestamp
     user.lastLogin = Date.now();
     await user.save({ validateBeforeSave: false });
+    recordAudit({
+      req,
+      actor: user,
+      action: 'LOGIN',
+      resource: 'User',
+      resourceId: user._id,
+      meta: { outcome: 'success' },
+    });
 
     // Generate JWT token
     const token = user.getSignedJwtToken();
@@ -171,6 +200,7 @@ exports.login = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
+    const genericMessage = 'If an account exists with that corporate email, a password reset link has been dispatched.';
 
     if (typeof email !== 'string' || !validator.isEmail(email.trim())) {
       return ApiResponse.error(res, 'Please provide a valid work email address', null, 400);
@@ -179,54 +209,50 @@ exports.forgotPassword = async (req, res, next) => {
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
-      // Return 200/safe message to prevent account enumeration
-      return ApiResponse.success(
-        res,
-        'If an account exists with that corporate email, a password reset link has been dispatched.'
-      );
+      return ApiResponse.success(res, genericMessage);
     }
 
-    // Generate reset token
+    const configuredFrontendUrl = process.env.FRONTEND_URL || process.env.APP_URL;
+    const frontendUrl = configuredFrontendUrl || (
+      process.env.NODE_ENV === 'production' ? '' : `${req.protocol}://${req.get('host')}`
+    );
+    let resetBaseUrl = '';
+    try {
+      const parsedUrl = new URL(frontendUrl);
+      if (['http:', 'https:'].includes(parsedUrl.protocol)) resetBaseUrl = parsedUrl.href.replace(/\/$/, '');
+    } catch {
+      resetBaseUrl = '';
+    }
+
+    if (!isEmailConfigured() || !resetBaseUrl) {
+      console.error('[Email] Password reset unavailable because email or frontend URL configuration is missing.');
+      return ApiResponse.success(res, genericMessage);
+    }
+
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
+    const resetUrl = `${resetBaseUrl}/reset-password.html?token=${resetToken}`;
 
-    const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-    const resetUrl = `${frontendUrl.replace(/\/$/, '')}/reset-password.html?token=${resetToken}`;
-
-    if (isEmailConfigured()) {
-      try {
-        await sendResetPasswordEmail(user.email, resetUrl);
-      } catch (emailError) {
-        // Roll back the token so the user isn't left with a dead-end reset
-        // link that was never delivered, and let them retry.
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpire = undefined;
-        await user.save({ validateBeforeSave: false });
-        console.error('[Email] Password reset email could not be sent:', emailError.message);
-        return ApiResponse.error(res, 'Password reset email could not be sent. Please try again later.', null, 502);
-      }
-    } else if (process.env.NODE_ENV === 'production') {
-      // Never leak the reset token in the response on a real deployment —
-      // fail closed instead of falling back to the dev-only behavior below.
+    try {
+      await sendResetPasswordEmail(user.email, resetUrl);
+    } catch {
       user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
       await user.save({ validateBeforeSave: false });
-      return ApiResponse.error(res, 'Password reset is temporarily unavailable. Please contact an administrator.', null, 503);
+      console.error('[Email] Password reset email delivery failed.');
+      return ApiResponse.success(res, genericMessage);
     }
 
-    const responseData = { expiresInMinutes: 30 };
-    if (process.env.NODE_ENV !== 'production') {
-      // Email isn't configured (or NODE_ENV isn't production) — return the
-      // link directly so local/dev environments keep working without SMTP.
-      responseData.resetUrl = resetUrl;
-      responseData.resetToken = resetToken;
-    }
+    recordAudit({
+      req,
+      actor: user,
+      action: 'PASSWORD_RESET',
+      resource: 'User',
+      resourceId: user._id,
+      meta: { flow: 'reset_requested' },
+    });
 
-    return ApiResponse.success(
-      res,
-      'Password reset link generated successfully',
-      responseData
-    );
+    return ApiResponse.success(res, genericMessage);
   } catch (err) {
     next(err);
   }
@@ -273,9 +299,18 @@ exports.resetPassword = async (req, res, next) => {
 
     // Set new password and clear reset fields
     user.password = password;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
     await user.save();
+    recordAudit({
+      req,
+      actor: user,
+      action: 'PASSWORD_RESET',
+      resource: 'User',
+      resourceId: user._id,
+      meta: { flow: 'reset_completed' },
+    });
 
     // Auto-login with new token
     const token = user.getSignedJwtToken();

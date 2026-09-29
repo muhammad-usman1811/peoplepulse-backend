@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Department = require('../models/Department');
 const Designation = require('../models/Designation');
 const Location = require('../models/Location');
+const recordAudit = require('../utils/recordAudit');
 
 const models = { Department, Designation, Location };
 
@@ -33,7 +34,7 @@ const listRecords = (Model, label, resourceKey) => async (req, res, next) => {
           query.$and = [locationCondition, { $or: query.$or }];
           delete query.$or;
         } else {
-          query.location = { $regex: escapeRegex(location), $options: 'i' };
+          query.location = location;
         }
       }
     }
@@ -83,6 +84,13 @@ const createRecord = (Model, label, resourceKey) => async (req, res, next) => {
     }
 
     const record = await Model.create(payload);
+    recordAudit({
+      req,
+      action: 'CREATE',
+      resource: Model.modelName,
+      resourceId: record._id,
+      meta: { name: record.name, ...(Model.modelName === 'Department' ? { location: record.location } : {}) },
+    });
     return ApiResponse.success(res, `${label} created successfully`, { [resourceKey.slice(0, -1)]: record }, 201);
   } catch (err) {
     if (err.code === 11000) {
@@ -104,6 +112,7 @@ const updateRecord = (Model, label, resourceKey) => async (req, res, next) => {
       return ApiResponse.error(res, `${label} not found`, null, 404);
     }
 
+    const before = { name: record.name };
     record.name = name;
     if (Model.modelName === 'Department' && req.body.location !== undefined) {
       if (req.body.location !== null && !mongoose.isValidObjectId(req.body.location)) {
@@ -112,9 +121,20 @@ const updateRecord = (Model, label, resourceKey) => async (req, res, next) => {
       if (req.body.location && !(await Location.exists({ _id: req.body.location }))) {
         return ApiResponse.error(res, 'Location not found', null, 404);
       }
+      before.location = record.location;
       record.location = req.body.location || null;
     }
     await record.save();
+    recordAudit({
+      req,
+      action: 'UPDATE',
+      resource: Model.modelName,
+      resourceId: record._id,
+      meta: {
+        before,
+        after: { name: record.name, ...(Model.modelName === 'Department' ? { location: record.location } : {}) },
+      },
+    });
 
     return ApiResponse.success(res, `${label} updated successfully`, { [resourceKey.slice(0, -1)]: record });
   } catch (err) {
@@ -131,6 +151,14 @@ const deleteRecord = (Model, label, resourceKey) => async (req, res, next) => {
     if (!record) {
       return ApiResponse.error(res, `${label} not found`, null, 404);
     }
+
+    recordAudit({
+      req,
+      action: 'DELETE',
+      resource: Model.modelName,
+      resourceId: record._id,
+      meta: { name: record.name, ...(Model.modelName === 'Department' ? { location: record.location } : {}) },
+    });
 
     return ApiResponse.success(res, `${label} deleted successfully`, { [resourceKey.slice(0, -1)]: record });
   } catch (err) {
