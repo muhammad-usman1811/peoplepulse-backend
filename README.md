@@ -9,7 +9,7 @@ Cross-platform RESTful API built with **Node.js**, **Express**, and **MongoDB** 
 ## 🔒 Security Architecture
 
 1. **Password Protection**:
-   - Passwords are encrypted using **`bcryptjs`** with work factor 12.
+  - Passwords are one-way hashed using **`bcryptjs`** with work factor 12.
    - Salted and hashed before storing in MongoDB.
    - Irreversible one-way cryptographic hash — plain passwords are never saved and cannot be viewed by anyone, including database administrators.
    - Database queries exclude `password` by default (`select: false`).
@@ -41,6 +41,17 @@ npm install
 # Copy .env.example to .env and provide local values.
 # Production requires MONGO_URI, JWT_SECRET, ENCRYPTION_KEY, and APP_TIMEZONE.
 ```
+
+Use `MONGO_TEST_URI` for test scripts; its database name must end in `_test`. The default `npm test` runs database-free unit tests. HTTP integration scripts additionally require the API server to be running with `NODE_ENV=test` and `MONGO_URI` set to that same test database; the server refuses test mode with a non-test database name.
+
+```powershell
+Copy-Item .env.example .env
+$env:NODE_ENV = 'test'
+$env:MONGO_URI = $env:MONGO_TEST_URI
+npm start
+```
+
+In a second terminal, set `TEST_ADMIN_EMAIL` and `TEST_ADMIN_PASSWORD` to a Super Admin fixture in that disposable database, then run `npm run test:api`, `npm run test:employee`, `npm run test:leave-wfh`, or `npm run test:audit`. The password should match the test seed's `SEED_PASSWORD`; never reuse production credentials.
 
 ### 3. Seed Super Admin Account
 Pre-populates the database with initial accounts:
@@ -85,24 +96,27 @@ Base URL: `http://localhost:5000/api`
 ```json
 {
   "email": "admin@peoplepulse.com",
-  "password": "Password@123"
+  "password": "<your-SEED_PASSWORD>"
 }
 ```
-- **Response**: `200 OK`
+
+### 2.1 Employee Registration
+- **POST** `/auth/register` requires a Bearer token from a `superadmin`, `admin`, or `hr` account.
+- Anonymous registration is disabled and returns `401`; authenticated users without an allowed role receive `403`.
+- The current backend supports employee creation by an administrator or HR. Public self-registration policy remains pending product confirmation; this endpoint does not provide public onboarding.
+- **Response**: `201 Created`; the newly created account must sign in separately.
 ```json
 {
   "success": true,
-  "message": "Login successful",
+  "message": "User registered successfully",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
       "id": "664fa1b234567890abcdef12",
-      "name": "Super Administrator",
-      "email": "admin@peoplepulse.com",
-      "role": "superadmin",
-      "department": "Executive HR",
-      "designation": "Chief HR Officer",
-      "lastLogin": "2026-09-21T11:15:00.000Z"
+      "name": "Ayesha Khan",
+      "email": "ayesha@example.com",
+      "role": "employee",
+      "department": "Engineering",
+      "designation": "Software Engineer"
     }
   }
 }
@@ -120,14 +134,11 @@ Base URL: `http://localhost:5000/api`
 ```json
 {
   "success": true,
-  "message": "Password reset link generated successfully",
-  "data": {
-    "expiresInMinutes": 30
-  }
+  "message": "If an account exists with that corporate email, a password reset link has been dispatched."
 }
 ```
 
-The API never returns the reset token. Configure SMTP variables so the single-use token is delivered only through the password-reset email.
+The API returns the same response for known/unknown emails and email-delivery/configuration failures. It never returns the reset token or URL, including development. Configure SMTP and frontend URL variables so the single-use token is delivered only through the password-reset email.
 
 ### 4. Reset Password
 - **PUT** `/auth/reset-password/:resetToken`
@@ -143,13 +154,17 @@ The API never returns the reset token. Configure SMTP variables so the single-us
 The email link opens `GET /reset-password.html?token=...`, which submits the new password to the reset API. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `EMAIL_USER`, and `EMAIL_PASS` in `.env`. For Gmail, use an App Password.
 
 ### 5. Employee Management (Admin/HR only for writes)
-- **GET** `/employees?page=1&limit=10&search=ali&department=Engineering&location=Head%20Office&status=active`
+- **GET** `/employees?page=1&limit=10&search=ali&department=Engineering&designation=Engineer&location=Head%20Office&status=active` (`page` must be positive; `limit` must be 1-100)
 - **GET** `/employees/:id`
 - **POST** `/employees` with `name`, `email`, and `password` (optional `employeeId`, `phoneNumber`, `department`, `designation`, `location`, `status`, `manager`)
 - **PUT** `/employees/:id` (supports `location`, `status: active|on-leave`, and `isActive`)
 - **DELETE** `/employees/:id` (soft-deactivates the employee)
 
+Optional phone numbers must contain 7-15 digits with an optional international `+` prefix. Invalid pagination, phone numbers, and employee IDs return `400`.
+
 All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing and detail are restricted to `superadmin`, `admin`, or `hr`; create, update, and deactivate require the same roles and only target users with `role: employee`.
+
+Employee `User.location` is currently stored as a canonical `Location.name` string for API compatibility. `Department.location` is a `Location` ObjectId reference and is populated as a location document in department responses. Employee APIs accept/filter by location name; department APIs accept/filter by location ID.
 
 ### Leave &amp; WFH Requests
 - **POST** `/leave-requests`, **POST** `/wfh-requests` to submit a request (employees only, need an assigned manager).
@@ -157,8 +172,10 @@ All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing
 - **PATCH** `/leave-requests/:id/approve`, `/leave-requests/:id/reject` (and the `/wfh-requests` equivalents) for the assigned manager to decide.
 
 ### Performance Reviews
-- **POST** `/performance/cycles` to create a review period (superadmin, admin, or HR).
-- **POST** `/performance/cycles/:cycleId/reviews` to submit an employee self-review with a rating from 1 to 5.
+- **POST** `/performance/cycles` to create a review period (superadmin, admin, or HR); optional `startDate` and `endDate` must both be valid `YYYY-MM-DD` dates, with start on/before end.
+- **POST** `/performance/cycles/:cycleId/reviews` to submit an employee self-review with a rating from 1 to 5 and optional `goals` containing numeric KPI targets/actuals.
+- **GET** `/performance/team/reviews?page=1&limit=20` to list reviews for the authenticated manager's direct reports.
+- **GET** `/performance/reviews/:reviewId` is limited to the reviewed employee, their current manager, or HR/admin roles; other authenticated users receive `403`.
 - Import `PeoplePulse_Performance_API.postman_collection.json` for the focused Postman flow.
 
 ### Attendance
@@ -187,7 +204,10 @@ Example request:
 ```
 
 ### Audit Log
-- **GET** `/audit-log`, **GET** `/audit-log/:id` (superadmin, admin only) — records CREATE/UPDATE/DELETE actions on payroll data.
+- **GET** `/audit-log`, **GET** `/audit-log/:id` (superadmin, admin only) — records employee, profile, organization, authentication, and payroll changes. Password values and profile field values are not stored in audit metadata.
+
+### Department Location Backfill
+Run `npm run backfill:department-locations` to preview legacy string values in `Department.location`. Resolve any unmatched or ambiguous values first, then apply mappings with `npm run backfill:department-locations -- --apply`.
 
 ### 5. Get Logged-in Profile (Protected)
 - **GET** `/auth/me`

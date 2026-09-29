@@ -1,11 +1,15 @@
 {
   "info": {
     "name": "PeoplePulse Performance Review API",
-    "description": "Focused flow for creating a review cycle and submitting an employee self-review.",
+    "description": "Focused flow for creating a review cycle, submitting goals/KPIs, and checking manager/team review access.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "testAdminEmail", "value": "admin@peoplepulse.com" },
+    { "key": "testAdminPassword", "value": "replace-with-test-admin-password" },
+    { "key": "testEmployeeEmail", "value": "employee@example.com" },
+    { "key": "testUserPassword", "value": "replace-with-test-user-password" },
     { "key": "managerToken", "value": "" },
     { "key": "employeeToken", "value": "" },
     { "key": "performanceCycleId", "value": "" },
@@ -30,7 +34,7 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}"
+          "raw": "{\n  \"email\": \"{{testAdminEmail}}\",\n  \"password\": \"{{testAdminPassword}}\"\n}"
         },
         "url": "{{baseUrl}}/auth/login"
       }
@@ -53,7 +57,7 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"sarah.connor@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}"
+          "raw": "{\n  \"email\": \"{{testEmployeeEmail}}\",\n  \"password\": \"{{testUserPassword}}\"\n}"
         },
         "url": "{{baseUrl}}/auth/login"
       }
@@ -109,9 +113,55 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"selfReview\": \"Delivered planned work and supported the team.\",\n  \"rating\": 4\n}"
+          "raw": "{\n  \"selfReview\": \"Delivered planned work and supported the team.\",\n  \"rating\": 4,\n  \"goals\": [{\n    \"title\": \"Improve response time\",\n    \"status\": \"in_progress\",\n    \"kpis\": [{ \"name\": \"Average response time\", \"target\": 4, \"actual\": 5, \"unit\": \"hours\", \"weight\": 50 }]\n  }]\n}"
         },
         "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
+      }
+    }
+  ,
+    {
+      "name": "List Manager Team Reviews",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": "{{baseUrl}}/performance/team/reviews?page=1&limit=20"
+      }
+    },
+    {
+      "name": "Get Review (Manager/HR/Owner Only)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}"
+      }
+    },
+    {
+      "name": "Submit Manager Review and Rating",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('manager review is submitted', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) {",
+              "  const review = pm.response.json().data.review;",
+              "  pm.expect(review.managerReview).to.not.be.empty;",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"managerReview\": \"Great performance and project execution.\",\n  \"rating\": 5\n}"
+        },
+        "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}/manager-review"
       }
     }
   ]

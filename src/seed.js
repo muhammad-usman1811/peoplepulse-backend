@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const { isTestMongoUri } = require('./utils/testDatabase');
 
 dotenv.config();
 
@@ -24,6 +25,9 @@ const seedUsers = async () => {
       throw new Error('Seed refused. Set ALLOW_DESTRUCTIVE_SEED=true in a non-production environment to replace users.');
     }
     const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/peoplepulse';
+    if (process.env.NODE_ENV === 'test' && !isTestMongoUri(mongoURI)) {
+      throw new Error('NODE_ENV=test requires MONGO_URI to use a database name ending in _test');
+    }
     await mongoose.connect(mongoURI);
     console.log('[Seed] Connected to MongoDB...');
 

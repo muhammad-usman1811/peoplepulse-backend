@@ -8,6 +8,8 @@ const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 const validateManager = require('../utils/managerValidation');
 const { buildNameSearchTokens, searchDigest } = require('../utils/searchIndex');
+const recordAudit = require('../utils/recordAudit');
+const { isValidPhoneNumber } = require('../utils/phoneValidation');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -33,6 +35,14 @@ const employeeFields = (employee) => ({
 const loadEmployee = (id) => User.findById(id).populate('manager', 'name email employeeId');
 
 const findEmployeeTarget = async (id) => User.findOne({ _id: id, role: 'employee' });
+
+const parsePositiveInteger = (value, fallback, maximum = Number.MAX_SAFE_INTEGER) => {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) return null;
+  return parsed;
+};
 
 const referenceModels = { department: Department, designation: Designation, location: Location };
 
@@ -74,8 +84,11 @@ const nextEmployeeId = async () => {
 
 exports.listEmployees = async (req, res, next) => {
   try {
-    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
-    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 100);
+    const page = parsePositiveInteger(req.query.page, 1);
+    const limit = parsePositiveInteger(req.query.limit, 10, 100);
+    if (page === null || limit === null) {
+      return ApiResponse.error(res, 'page must be a positive integer and limit must be an integer between 1 and 100', null, 400);
+    }
     const filter = { role: 'employee', isActive: true };
     const additionalFilters = [];
 
@@ -163,6 +176,12 @@ exports.createEmployee = async (req, res, next) => {
     if (typeof name !== 'string' || !name.trim() || typeof email !== 'string' || !email.trim() || !validator.isEmail(email.trim()) || typeof password !== 'string' || password.length < 6 || password.length > 72) {
       return ApiResponse.error(res, 'Name, valid email, and password between 6 and 72 characters are required', null, 400);
     }
+    if (phoneNumber !== undefined && phoneNumber !== null && phoneNumber !== '' && !isValidPhoneNumber(phoneNumber)) {
+      return ApiResponse.error(res, 'phoneNumber must be a valid phone number', null, 400);
+    }
+    if (employeeId !== undefined && employeeId !== '' && (typeof employeeId !== 'string' || employeeId.trim().length > 64)) {
+      return ApiResponse.error(res, 'employeeId must be a string of 64 characters or fewer', null, 400);
+    }
     const normalizedEmail = email.trim().toLowerCase();
     if (await User.exists({ email: normalizedEmail })) return ApiResponse.error(res, 'An account with that email already exists', null, 409);
     if (status !== undefined && !['active', 'on-leave'].includes(status)) return ApiResponse.error(res, 'status must be active or on-leave', null, 400);
@@ -175,6 +194,13 @@ exports.createEmployee = async (req, res, next) => {
       employeeId: employeeId === undefined || employeeId === '' ? await nextEmployeeId() : employeeId,
       phoneNumber: phoneNumber || '', department: normalizedDepartment, designation: normalizedDesignation,
       location: normalizedLocation, status: status || 'active', manager: managerId,
+    });
+    recordAudit({
+      req,
+      action: 'CREATE',
+      resource: 'User',
+      resourceId: employee._id,
+      meta: { changedFields: ['name', 'email', 'employeeId', 'department', 'designation', 'location', 'status', 'manager'] },
     });
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee created successfully', { employee: employeeFields(result) }, 201);
@@ -194,6 +220,15 @@ exports.updateEmployee = async (req, res, next) => {
     if (updates.employeeId === null || updates.employeeId === '') {
       delete updates.employeeId;
       unset.employeeId = '';
+    } else if (updates.employeeId !== undefined && (typeof updates.employeeId !== 'string' || updates.employeeId.trim().length > 64)) {
+      return ApiResponse.error(res, 'employeeId must be a string of 64 characters or fewer', null, 400);
+    }
+    if (updates.phoneNumber !== undefined) {
+      if (updates.phoneNumber === null || updates.phoneNumber === '') {
+        updates.phoneNumber = '';
+      } else if (!isValidPhoneNumber(updates.phoneNumber)) {
+        return ApiResponse.error(res, 'phoneNumber must be a valid phone number', null, 400);
+      }
     }
     if (updates.status !== undefined && !['active', 'on-leave'].includes(updates.status)) return ApiResponse.error(res, 'status must be active or on-leave', null, 400);
     if (updates.manager !== undefined) updates.manager = await validateManager(updates.manager, req.params.id);
@@ -209,11 +244,29 @@ exports.updateEmployee = async (req, res, next) => {
       }
     }
 
+    if (Object.keys(updates).length === 0 && Object.keys(unset).length === 0) {
+      return ApiResponse.error(res, 'Provide at least one employee field to update', null, 400);
+    }
+
     const target = await findEmployeeTarget(req.params.id);
     if (!target) return ApiResponse.error(res, 'Employee not found', null, 404);
+    const before = {};
+    for (const field of ['employeeId', 'department', 'designation', 'location', 'status', 'manager', 'isActive']) {
+      if (updates[field] !== undefined || unset[field]) before[field] = target[field];
+    }
     const updateOperation = { $set: updates };
     if (Object.keys(unset).length) updateOperation.$unset = unset;
     const employee = await User.findByIdAndUpdate(req.params.id, updateOperation, { new: true, runValidators: true });
+    const after = {};
+    for (const field of Object.keys(before)) after[field] = employee[field];
+    const changedFields = [...new Set([...Object.keys(updates), ...Object.keys(unset)])];
+    recordAudit({
+      req,
+      action: 'UPDATE',
+      resource: 'User',
+      resourceId: employee._id,
+      meta: { changedFields, before, after },
+    });
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee updated successfully', { employee: employeeFields(result) });
   } catch (err) {
@@ -231,6 +284,13 @@ exports.deactivateEmployee = async (req, res, next) => {
     }
     const employee = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true })
       .populate('manager', 'name email employeeId');
+    recordAudit({
+      req,
+      action: 'DEACTIVATE',
+      resource: 'User',
+      resourceId: employee._id,
+      meta: { changedFields: ['isActive'], before: { isActive: target.isActive }, after: { isActive: employee.isActive } },
+    });
     return ApiResponse.success(res, 'Employee deactivated successfully', { employee: employeeFields(employee) });
   } catch (err) {
     next(err);

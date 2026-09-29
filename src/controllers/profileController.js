@@ -6,6 +6,8 @@ const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 const validateManager = require('../utils/managerValidation');
+const recordAudit = require('../utils/recordAudit');
+const { isValidPhoneNumber } = require('../utils/phoneValidation');
 
 const adminRoles = ['superadmin', 'admin', 'hr'];
 
@@ -63,7 +65,12 @@ exports.updateProfile = async (req, res, next) => {
     const updates = {};
 
     if (name !== undefined) updates.name = name;
-    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+    if (phoneNumber !== undefined) {
+      if (phoneNumber !== null && phoneNumber !== '' && !isValidPhoneNumber(phoneNumber)) {
+        return ApiResponse.error(res, 'phoneNumber must be a valid phone number', null, 400);
+      }
+      updates.phoneNumber = phoneNumber || '';
+    }
 
     if (employeeId !== undefined || department !== undefined || designation !== undefined || manager !== undefined) {
       if (!isAdmin) {
@@ -106,6 +113,19 @@ exports.updateProfile = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
+    const changedFields = [
+      ...Object.keys(updates).filter((field) => field !== '$unset'),
+      ...Object.keys(updates.$unset || {}),
+    ];
+    if (changedFields.length) {
+      recordAudit({
+        req,
+        action: 'UPDATE',
+        resource: 'User',
+        resourceId: req.user._id,
+        meta: { changedFields },
+      });
+    }
 
     const user = await loadProfile(req.user._id);
     return ApiResponse.success(res, 'Profile updated successfully', {
@@ -135,7 +155,15 @@ exports.changePassword = async (req, res, next) => {
     }
 
     user.password = newPassword;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
+    recordAudit({
+      req,
+      action: 'PASSWORD_RESET',
+      resource: 'User',
+      resourceId: user._id,
+      meta: { flow: 'password_change' },
+    });
     return ApiResponse.success(res, 'Password changed successfully');
   } catch (err) {
     next(err);
@@ -171,6 +199,13 @@ exports.updateNotifications = async (req, res, next) => {
     const user = await User.findByIdAndUpdate(req.user._id, updates, {
       new: true,
       runValidators: true,
+    });
+    recordAudit({
+      req,
+      action: 'UPDATE',
+      resource: 'User',
+      resourceId: user._id,
+      meta: { changedFields: Object.keys(updates) },
     });
 
     return ApiResponse.success(res, 'Notification preferences updated successfully', {

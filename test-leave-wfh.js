@@ -5,6 +5,8 @@ const dns = require('dns');
 const User = require('./src/models/User');
 const LeaveRequest = require('./src/models/LeaveRequest');
 const WfhRequest = require('./src/models/WfhRequest');
+const { getTestMongoUri } = require('./src/utils/testDatabase');
+const testPassword = process.env.TEST_USER_PASSWORD;
 
 const baseUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api`;
 const suffix = Date.now();
@@ -17,10 +19,11 @@ const request = async (path, options = {}) => {
 };
 
 const login = async (email) => {
+  assert(testPassword, 'Set TEST_USER_PASSWORD for integration tests');
   const result = await request('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'Password@123' }),
+    body: JSON.stringify({ email, password: testPassword }),
   });
   assert.strictEqual(result.status, 200, `Login failed for ${email}`);
   return result.data.data.token;
@@ -29,20 +32,24 @@ const login = async (email) => {
 (async () => {
   const createdUsers = [];
   const createdRequests = [];
-  await mongoose.connect(process.env.MONGO_URI);
+  assert(testPassword, 'Set TEST_USER_PASSWORD for integration tests');
+  await mongoose.connect(getTestMongoUri());
 
   try {
+    const health = await request('/health');
+    assert.strictEqual(health.status, 200, 'API test server should be reachable');
+    assert.strictEqual(health.data.data.environment, 'test', 'API server must run in test mode');
     const manager = await User.create({
       name: 'Leave WFH Test Manager',
       email: `leave.manager.${suffix}@peoplepulse.com`,
-      password: 'Password@123',
+      password: testPassword,
       role: 'admin',
       employeeId: `TEST-MANAGER-${suffix}`,
     });
     const employee = await User.create({
       name: 'Leave WFH Test Employee',
       email: `leave.employee.${suffix}@peoplepulse.com`,
-      password: 'Password@123',
+      password: testPassword,
       role: 'employee',
       employeeId: `TEST-REQUEST-${suffix}`,
       manager: manager._id,

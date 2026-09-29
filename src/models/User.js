@@ -12,7 +12,13 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please provide a full name'],
       trim: true,
-      maxlength: [120, 'Name must not exceed 120 characters'],
+      validate: {
+        validator(value) {
+          const plaintext = isEncryptedValue(value) ? decrypt(value) : value;
+          return typeof plaintext === 'string' && plaintext.length <= 120;
+        },
+        message: 'Name must not exceed 120 characters',
+      },
       // Field-level AES-256 encryption at rest
       set: (val) => (val && !isEncryptedValue(val) ? encrypt(val) : val),
       get: (val) => (val ? decrypt(val) : val),
@@ -67,6 +73,7 @@ const UserSchema = new mongoose.Schema(
       trim: true,
     },
     location: {
+      // Employee location remains the canonical Location.name string for API compatibility.
       type: String,
       default: '',
       trim: true,
@@ -99,6 +106,10 @@ const UserSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
     },
     lastLogin: {
       type: Date,
@@ -143,6 +154,7 @@ UserSchema.methods.getSignedJwtToken = function () {
       id: this._id,
       email: this.email,
       role: this.role,
+      tokenVersion: this.tokenVersion || 0,
     },
     getJwtSecret(),
     {
