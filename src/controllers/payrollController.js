@@ -92,14 +92,13 @@ exports.createSalaryStructure = async (req, res, next) => {
       allowances,
     });
 
-    // Fire-and-forget audit log (non-blocking — don't fail the request if logging fails)
-    AuditLog.record({
+    await AuditLog.record({
       ...actorFrom(req),
       action: 'CREATE',
       resource: 'SalaryStructure',
       resourceId: salaryStructure._id,
       meta: { grade, basicPercentage, allowances },
-    }).catch((e) => console.error('[AuditLog] Failed to record CREATE SalaryStructure:', e.message));
+    });
 
     return ApiResponse.success(
       res,
@@ -183,13 +182,13 @@ exports.updateSalaryStructure = async (req, res, next) => {
       { new: true, runValidators: true }
     );
 
-    AuditLog.record({
+    await AuditLog.record({
       ...actorFrom(req),
       action: 'UPDATE',
       resource: 'SalaryStructure',
       resourceId: salaryStructure._id,
       meta: { before, after: updates },
-    }).catch((e) => console.error('[AuditLog] Failed to record UPDATE SalaryStructure:', e.message));
+    });
 
     return ApiResponse.success(res, 'Salary structure updated successfully.', { salaryStructure });
   } catch (err) {
@@ -223,7 +222,7 @@ exports.deleteSalaryStructure = async (req, res, next) => {
 
     await salaryStructure.deleteOne();
 
-    AuditLog.record({
+    await AuditLog.record({
       ...actorFrom(req),
       action: 'DELETE',
       resource: 'SalaryStructure',
@@ -232,7 +231,7 @@ exports.deleteSalaryStructure = async (req, res, next) => {
         grade: salaryStructure.grade,
         basicPercentage: salaryStructure.basicPercentage,
       },
-    }).catch((e) => console.error('[AuditLog] Failed to record DELETE SalaryStructure:', e.message));
+    });
 
     return ApiResponse.success(res, 'Salary structure deleted successfully.');
   } catch (err) {

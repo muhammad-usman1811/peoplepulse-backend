@@ -170,6 +170,13 @@ All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing
 
 Attendance timestamps are stored in UTC. Calendar dates and the 9:00 AM late threshold use `APP_TIMEZONE` (default `Asia/Karachi`).
 
+### Reports (Admin/HR)
+- **GET** `/reports/attendance-summary?from=YYYY-MM-DD&to=YYYY-MM-DD`: totals by attendance status and distinct employees; date bounds are optional.
+- **GET** `/reports/leave-summary?from=YYYY-MM-DD&to=YYYY-MM-DD`: totals by leave status and type; date bounds filter request start dates.
+- **GET** `/reports/payroll-summary`: salary-structure count, average basic percentage, and allowance totals by type.
+
+The payroll summary reflects configured salary structures. This API does not currently store payroll runs or employee payouts, so it does not report paid payroll amounts.
+
 ### Payroll Salary Structures
 - **GET** `/payroll/salary-structure`, **GET** `/payroll/salary-structure/:id` (Admin/HR)
 - **POST** `/payroll/salary-structure`, **PUT** `/payroll/salary-structure/:id`, **DELETE** `/payroll/salary-structure/:id` (Admin/HR)
