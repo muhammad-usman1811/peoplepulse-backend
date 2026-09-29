@@ -4,6 +4,7 @@ const Department = require('../models/Department');
 const Designation = require('../models/Designation');
 const Location = require('../models/Location');
 const EmployeeCounter = require('../models/EmployeeCounter');
+const AuditLog = require('../models/AuditLog');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 const validateManager = require('../utils/managerValidation');
@@ -175,6 +176,16 @@ exports.createEmployee = async (req, res, next) => {
       employeeId: employeeId === undefined || employeeId === '' ? await nextEmployeeId() : employeeId,
       phoneNumber: phoneNumber || '', department: normalizedDepartment, designation: normalizedDesignation,
       location: normalizedLocation, status: status || 'active', manager: managerId,
+    });
+    await AuditLog.record({
+      actor: req.user._id,
+      actorName: req.user.name || '',
+      actorRole: req.user.role || '',
+      action: 'CREATE',
+      resource: 'Employee',
+      resourceId: employee._id,
+      meta: { employeeId: employee.employeeId, email: employee.email },
+      req,
     });
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee created successfully', { employee: employeeFields(result) }, 201);

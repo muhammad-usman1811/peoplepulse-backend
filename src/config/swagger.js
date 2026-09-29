@@ -1064,7 +1064,7 @@ const swaggerDocument = {
           { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 }, description: 'Page number' },
           { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 }, description: 'Results per page (max 100)' },
           { in: 'query', name: 'actor', schema: { type: 'string' }, description: 'Filter by actor (User ObjectId)' },
-          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
+          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REJECT', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
           { in: 'query', name: 'resource', schema: { type: 'string', example: 'SalaryStructure' }, description: 'Filter by entity type' },
           { in: 'query', name: 'resourceId', schema: { type: 'string' }, description: 'Filter by specific document ID' },
           { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Start date (ISO 8601), inclusive' },
@@ -1075,6 +1075,122 @@ const swaggerDocument = {
           400: { description: 'Invalid date filter' },
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'Only superadmin and admin can view the audit log' },
+        },
+      },
+    },
+    '/reports/attendance-summary': {
+      get: {
+        summary: 'Get Attendance Summary',
+        description: 'Aggregates attendance records by status and distinct employee. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive UTC date (YYYY-MM-DD)' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive UTC date (YYYY-MM-DD)' },
+        ],
+        responses: {
+          200: {
+            description: 'Attendance summary retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        total: { type: 'integer' },
+                        employeeCount: { type: 'integer' },
+                        byStatus: { type: 'object', additionalProperties: { type: 'integer' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid date or from date after to date' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'HR/Admin role required' },
+        },
+      },
+    },
+    '/reports/leave-summary': {
+      get: {
+        summary: 'Get Leave Summary',
+        description: 'Aggregates leave requests by status and leave type. Optional date bounds filter request start dates. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive request start date (YYYY-MM-DD)' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive request start date (YYYY-MM-DD)' },
+        ],
+        responses: {
+          200: {
+            description: 'Leave summary retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        total: { type: 'integer' },
+                        byStatus: { type: 'object', additionalProperties: { type: 'integer' } },
+                        byType: { type: 'object', additionalProperties: { type: 'integer' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid date or from date after to date' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'HR/Admin role required' },
+        },
+      },
+    },
+    '/reports/payroll-summary': {
+      get: {
+        summary: 'Get Payroll Summary',
+        description: 'Aggregates stored salary structures and configured allowances. This API does not store payroll runs or payouts. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Payroll summary retrieved successfully; data reflects salary structures and allowances, not payroll payments',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        structureCount: { type: 'integer' },
+                        averageBasicPercentage: { type: 'number' },
+                        allowanceCount: { type: 'integer' },
+                        allowances: {
+                          type: 'object',
+                          properties: {
+                            fixed: { type: 'object', properties: { count: { type: 'integer' }, totalValue: { type: 'number' } } },
+                            percentage: { type: 'object', properties: { count: { type: 'integer' }, totalValue: { type: 'number' } } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'HR/Admin role required' },
         },
       },
     },

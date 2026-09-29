@@ -6,6 +6,7 @@ const User = require('./src/models/User');
 const Department = require('./src/models/Department');
 const Designation = require('./src/models/Designation');
 const Location = require('./src/models/Location');
+const AuditLog = require('./src/models/AuditLog');
 
 dns.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','));
 
@@ -29,6 +30,7 @@ const login = async (email) => {
 
 (async () => {
   const createdIds = [];
+  const createdEmployeeIds = [];
   await mongoose.connect(process.env.MONGO_URI);
 
   try {
@@ -54,12 +56,37 @@ const login = async (email) => {
       employeeId: `TEST-EMP-${suffix}`,
       department: 'Engineering',
     });
-    createdIds.push(hr._id, employee._id);
+    const admin = await User.create({
+      name: 'Temporary Audit Test Admin',
+      email: `temporary.audit.admin.${suffix}@peoplepulse.com`,
+      password: 'Password@123',
+      role: 'admin',
+      employeeId: `TEST-AUDIT-ADMIN-${suffix}`,
+    });
+    createdIds.push(hr._id, employee._id, admin._id);
 
     const hrToken = await login(hr.email);
     const employeeToken = await login(employee.email);
+    const adminToken = await login(admin.email);
     const hrHeaders = { Authorization: `Bearer ${hrToken}`, 'Content-Type': 'application/json' };
     const employeeHeaders = { Authorization: `Bearer ${employeeToken}`, 'Content-Type': 'application/json' };
+    const adminHeaders = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const assertEmployeeCreationAudit = async (id) => {
+      const entry = await AuditLog.findOne({
+        action: 'CREATE',
+        resource: 'Employee',
+        resourceId: String(id),
+      }).lean();
+      assert(entry, 'Employee creation should persist an audit document');
+      assert.strictEqual(String(entry.actor), String(hr._id), 'Audit actor should be the authenticated HR user');
+      assert.strictEqual(entry.resourceId, String(id), 'Audit resource ID should match the created employee');
+      assert(entry.createdAt instanceof Date, 'Audit entry should have a timestamp');
+
+      const result = await request(`/audit-log?resource=Employee&action=CREATE&resourceId=${id}`, { headers: adminHeaders });
+      assert.strictEqual(result.status, 200, 'Admin should be able to query employee creation audit logs');
+      assert(result.data.data.logs.some((log) => log.resourceId === String(id)), 'Employee creation should create an audit log');
+    };
 
     const created = await request('/employees', {
       method: 'POST',
@@ -76,6 +103,8 @@ const login = async (email) => {
     assert.strictEqual(created.status, 201, 'HR should create employees');
     const targetId = created.data.data.employee.id;
     createdIds.push(targetId);
+    createdEmployeeIds.push(targetId);
+    await assertEmployeeCreationAudit(targetId);
 
     const defaults = await request('/employees', {
       method: 'POST',
@@ -91,6 +120,8 @@ const login = async (email) => {
     assert.strictEqual(defaults.data.data.employee.designation, 'Team Member');
     assert.strictEqual(defaults.data.data.employee.location, '');
     createdIds.push(defaults.data.data.employee.id);
+    createdEmployeeIds.push(defaults.data.data.employee.id);
+    await assertEmployeeCreationAudit(defaults.data.data.employee.id);
 
     const filtered = await request('/employees?department=Engineering&location=Head%20Office&status=on-leave', {
       headers: hrHeaders,
@@ -123,6 +154,7 @@ const login = async (email) => {
     assert.strictEqual(deactivated.status, 200, 'HR should deactivate employees');
     console.log('Employee CRUD integration tests passed: filters, HR create/deactivate, employee create/deactivate blocks.');
   } finally {
+    await AuditLog.deleteMany({ resource: 'Employee', resourceId: { $in: createdEmployeeIds.map(String) } });
     await User.deleteMany({ _id: { $in: createdIds } });
     await mongoose.disconnect();
   }
