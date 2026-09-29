@@ -1,0 +1,118 @@
+{
+  "info": {
+    "name": "PeoplePulse Performance Review API",
+    "description": "Focused flow for creating a review cycle and submitting an employee self-review.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "managerToken", "value": "" },
+    { "key": "employeeToken", "value": "" },
+    { "key": "performanceCycleId", "value": "" },
+    { "key": "performanceReviewId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login HR / Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('admin login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('managerToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Login Employee",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('employeeToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"sarah.connor@peoplepulse.com\",\n  \"password\": \"Password@123\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Create Performance Cycle",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('cycle is created', function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set('performanceCycleId', pm.response.json().data.cycle._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"period\": \"Performance Test {{$guid}}\",\n  \"status\": \"open\"\n}"
+        },
+        "url": "{{baseUrl}}/performance/cycles"
+      }
+    },
+    {
+      "name": "Submit Self-Review",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('self-review is submitted', function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) {",
+              "  const review = pm.response.json().data.review;",
+              "  pm.expect(review.rating).to.be.within(1, 5);",
+              "  pm.collectionVariables.set('performanceReviewId', review._id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"selfReview\": \"Delivered planned work and supported the team.\",\n  \"rating\": 4\n}"
+        },
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
+      }
+    }
+  ]
+}

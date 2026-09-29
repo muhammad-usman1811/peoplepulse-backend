@@ -1,6 +1,13 @@
-const mongoose = require('mongoose');
+const validator = require('validator');
 const User = require('../models/User');
+const Department = require('../models/Department');
+const Designation = require('../models/Designation');
+const Location = require('../models/Location');
+const EmployeeCounter = require('../models/EmployeeCounter');
 const ApiResponse = require('../utils/apiResponse');
+const AppError = require('../utils/appError');
+const validateManager = require('../utils/managerValidation');
+const { buildNameSearchTokens, searchDigest } = require('../utils/searchIndex');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -14,7 +21,7 @@ const employeeFields = (employee) => ({
   department: employee.department,
   designation: employee.designation,
   location: employee.location || '',
-  status: employee.status,
+  status: employee.status || 'active',
   manager: employee.manager
     ? { id: employee.manager._id, name: employee.manager.name, email: employee.manager.email }
     : null,
@@ -25,27 +32,44 @@ const employeeFields = (employee) => ({
 
 const loadEmployee = (id) => User.findById(id).populate('manager', 'name email employeeId');
 
-const isManagerValidationError = (err) => /manager|selected manager/i.test(err.message || '');
-
 const findEmployeeTarget = async (id) => User.findOne({ _id: id, role: 'employee' });
 
-const nextEmployeeId = async () => {
-  const employees = await User.find({ employeeId: /^EMP-\d+$/ }).select('employeeId').lean();
-  const highest = employees.reduce((max, employee) => {
-    const number = Number(employee.employeeId.slice(4));
-    return Number.isInteger(number) && number > max ? number : max;
-  }, 1000);
-  return `EMP-${highest + 1}`;
+const referenceModels = { department: Department, designation: Designation, location: Location };
+
+const validateReference = async (field, value) => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new AppError(`${field} must be a non-empty string`, 400);
+  }
+  const normalized = value.trim();
+  const record = await referenceModels[field].findOne({
+    name: new RegExp(`^${escapeRegex(normalized)}$`, 'i'),
+  }).select('name').lean();
+  if (!record) throw new AppError(`${field} does not exist`, 400);
+  return record.name;
 };
 
-const validateManager = async (manager, currentId) => {
-  if (manager === null || manager === '') return null;
-  if (!mongoose.isValidObjectId(manager)) throw new Error('Manager must be a valid user ID');
-  if (String(manager) === String(currentId)) throw new Error('A user cannot be their own manager');
-  if (!(await User.exists({ _id: manager, isActive: true }))) {
-    throw new Error('Selected manager does not exist or is inactive');
+const nextEmployeeId = async () => {
+  const existingCounter = await EmployeeCounter.findById('employee').lean();
+  if (!existingCounter) {
+    const [highest] = await User.aggregate([
+      { $match: { employeeId: /^EMP-\d+$/ } },
+      { $project: { sequence: { $toInt: { $substr: ['$employeeId', 4, -1] } } } },
+      { $sort: { sequence: -1 } },
+      { $limit: 1 },
+    ]);
+    try {
+      await EmployeeCounter.create({ _id: 'employee', sequence: highest?.sequence || 1000 });
+    } catch (err) {
+      if (err.code !== 11000) throw err;
+    }
   }
-  return manager;
+
+  const counter = await EmployeeCounter.findOneAndUpdate(
+    { _id: 'employee' },
+    { $inc: { sequence: 1 } },
+    { new: true, runValidators: true }
+  ).lean();
+  return `EMP-${counter.sequence}`;
 };
 
 exports.listEmployees = async (req, res, next) => {
@@ -53,6 +77,7 @@ exports.listEmployees = async (req, res, next) => {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 100);
     const filter = { role: 'employee', isActive: true };
+    const additionalFilters = [];
 
     if (typeof req.query.department === 'string' && req.query.department.trim()) {
       filter.department = new RegExp(`^${escapeRegex(req.query.department.trim())}$`, 'i');
@@ -73,7 +98,11 @@ exports.listEmployees = async (req, res, next) => {
       if (!['active', 'on-leave'].includes(req.query.status)) {
         return ApiResponse.error(res, 'status must be active or on-leave', null, 400);
       }
-      filter.status = req.query.status;
+      if (req.query.status === 'active') {
+        additionalFilters.push({ $or: [{ status: 'active' }, { status: { $exists: false } }] });
+      } else {
+        filter.status = req.query.status;
+      }
     }
     if (req.query.isActive !== undefined) {
       if (!['true', 'false'].includes(req.query.isActive)) {
@@ -83,13 +112,30 @@ exports.listEmployees = async (req, res, next) => {
     }
 
     const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
-    const records = await User.find(filter).sort({ createdAt: -1 }).populate('manager', 'name email employeeId');
-    const filtered = search
-      ? records.filter((employee) => [employee.name, employee.email, employee.employeeId, employee.phoneNumber]
-          .some((value) => value && String(value).toLowerCase().includes(search)))
-      : records;
-    const total = filtered.length;
-    const employees = filtered.slice((page - 1) * limit, page * limit).map(employeeFields);
+    if (search) {
+      const searchTerms = search.split(/\s+/).filter(Boolean);
+      const nameQuery = searchTerms.length > 1
+        ? { $and: searchTerms.map((term) => ({ nameSearchTokens: searchDigest(term) })) }
+        : { nameSearchTokens: searchDigest(search) };
+      const searchQuery = [
+        nameQuery,
+        { email: { $regex: escapeRegex(search), $options: 'i' } },
+        { employeeId: { $regex: escapeRegex(search), $options: 'i' } },
+        { phoneNumber: { $regex: escapeRegex(search), $options: 'i' } },
+      ];
+      additionalFilters.push({ $or: searchQuery });
+    }
+    if (additionalFilters.length) filter.$and = additionalFilters;
+
+    const [total, records] = await Promise.all([
+      User.countDocuments(filter),
+      User.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('manager', 'name email employeeId'),
+    ]);
+    const employees = records.map(employeeFields);
 
     return ApiResponse.success(res, 'Employees retrieved successfully', {
       employees,
@@ -114,24 +160,26 @@ exports.getEmployee = async (req, res, next) => {
 exports.createEmployee = async (req, res, next) => {
   try {
     const { name, email, password, employeeId, phoneNumber, department, designation, location, status, manager } = req.body;
-    if (typeof name !== 'string' || !name.trim() || typeof email !== 'string' || !email.trim() || typeof password !== 'string' || password.length < 6) {
-      return ApiResponse.error(res, 'Name, valid email, and password of at least 6 characters are required', null, 400);
+    if (typeof name !== 'string' || !name.trim() || typeof email !== 'string' || !email.trim() || !validator.isEmail(email.trim()) || typeof password !== 'string' || password.length < 6 || password.length > 72) {
+      return ApiResponse.error(res, 'Name, valid email, and password between 6 and 72 characters are required', null, 400);
     }
     const normalizedEmail = email.trim().toLowerCase();
     if (await User.exists({ email: normalizedEmail })) return ApiResponse.error(res, 'An account with that email already exists', null, 409);
     if (status !== undefined && !['active', 'on-leave'].includes(status)) return ApiResponse.error(res, 'status must be active or on-leave', null, 400);
     const managerId = manager === undefined ? null : await validateManager(manager, null);
+    const normalizedDepartment = await validateReference('department', department === undefined ? 'General' : department);
+    const normalizedDesignation = await validateReference('designation', designation === undefined ? 'Team Member' : designation);
+    const normalizedLocation = location === undefined || location === '' ? '' : await validateReference('location', location);
     const employee = await User.create({
-      name: name.trim(), email: normalizedEmail, password, role: 'employee',
+      name: name.trim(), nameSearchTokens: buildNameSearchTokens(name), email: normalizedEmail, password, role: 'employee',
       employeeId: employeeId === undefined || employeeId === '' ? await nextEmployeeId() : employeeId,
-      phoneNumber: phoneNumber || '', department: department || 'General', designation: designation || 'Team Member',
-      location: location || '', status: status || 'active', manager: managerId,
+      phoneNumber: phoneNumber || '', department: normalizedDepartment, designation: normalizedDesignation,
+      location: normalizedLocation, status: status || 'active', manager: managerId,
     });
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee created successfully', { employee: employeeFields(result) }, 201);
   } catch (err) {
     if (err.code === 11000) return ApiResponse.error(res, 'Employee ID or email already exists', null, 409);
-    if (isManagerValidationError(err)) return ApiResponse.error(res, err.message, null, 400);
     next(err);
   }
 };
@@ -142,19 +190,34 @@ exports.updateEmployee = async (req, res, next) => {
     const updates = {};
     for (const field of allowed) if (req.body[field] !== undefined) updates[field] = req.body[field];
     if (updates.name !== undefined && (typeof updates.name !== 'string' || !updates.name.trim())) return ApiResponse.error(res, 'Name cannot be empty', null, 400);
-    if (updates.employeeId === null || updates.employeeId === '') updates.employeeId = undefined;
+    const unset = {};
+    if (updates.employeeId === null || updates.employeeId === '') {
+      delete updates.employeeId;
+      unset.employeeId = '';
+    }
     if (updates.status !== undefined && !['active', 'on-leave'].includes(updates.status)) return ApiResponse.error(res, 'status must be active or on-leave', null, 400);
     if (updates.manager !== undefined) updates.manager = await validateManager(updates.manager, req.params.id);
     if (updates.isActive !== undefined && typeof updates.isActive !== 'boolean') return ApiResponse.error(res, 'isActive must be boolean', null, 400);
+    if (updates.name !== undefined) updates.nameSearchTokens = buildNameSearchTokens(updates.name);
+    for (const field of ['department', 'designation', 'location']) {
+      if (updates[field] !== undefined) {
+        if (field === 'location' && updates[field] === '') {
+          updates[field] = '';
+        } else {
+          updates[field] = await validateReference(field, updates[field]);
+        }
+      }
+    }
 
     const target = await findEmployeeTarget(req.params.id);
     if (!target) return ApiResponse.error(res, 'Employee not found', null, 404);
-    const employee = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    const updateOperation = { $set: updates };
+    if (Object.keys(unset).length) updateOperation.$unset = unset;
+    const employee = await User.findByIdAndUpdate(req.params.id, updateOperation, { new: true, runValidators: true });
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee updated successfully', { employee: employeeFields(result) });
   } catch (err) {
     if (err.code === 11000) return ApiResponse.error(res, 'Employee ID already exists', null, 409);
-    if (isManagerValidationError(err)) return ApiResponse.error(res, err.message, null, 400);
     next(err);
   }
 };

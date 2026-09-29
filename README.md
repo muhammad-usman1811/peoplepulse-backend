@@ -38,8 +38,8 @@ Cross-platform RESTful API built with **Node.js**, **Express**, and **MongoDB** 
 # Install dependencies
 npm install
 
-# Setup environment variables (already configured in .env)
-# Review .env for PORT, MONGO_URI, JWT_SECRET, and ENCRYPTION_KEY
+# Copy .env.example to .env and provide local values.
+# Production requires MONGO_URI, JWT_SECRET, ENCRYPTION_KEY, and APP_TIMEZONE.
 ```
 
 ### 3. Seed Super Admin Account
@@ -48,11 +48,7 @@ Pre-populates the database with initial accounts:
 npm run seed
 ```
 
-**Default Test Credentials:**
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **Super Admin** 👑 | `admin@peoplepulse.com` | `Password@123` |
-| **Employee** 👤 | `sarah.connor@peoplepulse.com` | `Password@123` |
+The seed script requires `SEED_PASSWORD` and is disabled in production.
 
 ### 4. Start the Server
 ```bash
@@ -131,7 +127,7 @@ Base URL: `http://localhost:5000/api`
 }
 ```
 
-In non-production environments only, the response also includes `resetUrl` and `resetToken` for local testing. Production responses never expose the token.
+The API never returns the reset token. Configure SMTP variables so the single-use token is delivered only through the password-reset email.
 
 ### 4. Reset Password
 - **PUT** `/auth/reset-password/:resetToken`
@@ -154,6 +150,44 @@ The email link opens `GET /reset-password.html?token=...`, which submits the new
 - **DELETE** `/employees/:id` (soft-deactivates the employee)
 
 All Employee endpoints require `Authorization: Bearer <your_jwt_token>`. Listing and detail are restricted to `superadmin`, `admin`, or `hr`; create, update, and deactivate require the same roles and only target users with `role: employee`.
+
+### Leave &amp; WFH Requests
+- **POST** `/leave-requests`, **POST** `/wfh-requests` to submit a request (employees only, need an assigned manager).
+- **GET** `/leave-requests/my`, **GET** `/wfh-requests/my` to list your own requests.
+- **PATCH** `/leave-requests/:id/approve`, `/leave-requests/:id/reject` (and the `/wfh-requests` equivalents) for the assigned manager to decide.
+
+### Performance Reviews
+- **POST** `/performance/cycles` to create a review period (superadmin, admin, or HR).
+- **POST** `/performance/cycles/:cycleId/reviews` to submit an employee self-review with a rating from 1 to 5.
+- Import `PeoplePulse_Performance_API.postman_collection.json` for the focused Postman flow.
+
+### Attendance
+- **POST** `/attendance/clock-in`
+- **POST** `/attendance/clock-out`
+- **GET** `/attendance/me?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30`
+- **GET** `/attendance/team?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (direct reports)
+- **GET** `/attendance?employeeId=<id>&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (Admin/HR, all employees)
+
+Attendance timestamps are stored in UTC. Calendar dates and the 9:00 AM late threshold use `APP_TIMEZONE` (default `Asia/Karachi`).
+
+### Payroll Salary Structures
+- **GET** `/payroll/salary-structure`, **GET** `/payroll/salary-structure/:id` (Admin/HR)
+- **POST** `/payroll/salary-structure`, **PUT** `/payroll/salary-structure/:id`, **DELETE** `/payroll/salary-structure/:id` (Admin/HR)
+
+Example request:
+```json
+{
+  "grade": "G7",
+  "basicPercentage": 60,
+  "allowances": [
+    { "name": "Housing", "type": "percentage", "value": 20 },
+    { "name": "Transport", "type": "fixed", "value": 15000 }
+  ]
+}
+```
+
+### Audit Log
+- **GET** `/audit-log`, **GET** `/audit-log/:id` (superadmin, admin only) — records CREATE/UPDATE/DELETE actions on payroll data.
 
 ### 5. Get Logged-in Profile (Protected)
 - **GET** `/auth/me`

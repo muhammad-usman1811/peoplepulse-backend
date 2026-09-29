@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
+const { getJwtSecret } = require('../config/security');
 
 /**
  * Middleware to protect private routes with JWT Bearer tokens
@@ -29,7 +30,7 @@ const protect = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || 'peoplepulse_super_secret_jwt_key_2026_hrms_secure_token'
+      getJwtSecret()
     );
 
     // Attach user to request object (exclude password)

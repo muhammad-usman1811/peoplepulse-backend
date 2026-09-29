@@ -9,9 +9,9 @@ const DepartmentSchema = new mongoose.Schema(
       trim: true,
     },
     location: {
-      type: String,
-      default: '',
-      trim: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+      default: null,
     },
   },
   { timestamps: true }

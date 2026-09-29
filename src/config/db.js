@@ -7,6 +7,9 @@ dns.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','));
 
 const connectDB = async () => {
   try {
+    if (process.env.NODE_ENV === 'production' && !process.env.MONGO_URI) {
+      throw new Error('MONGO_URI must be configured in production');
+    }
     const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/peoplepulse';
     const conn = await mongoose.connect(mongoURI);
 

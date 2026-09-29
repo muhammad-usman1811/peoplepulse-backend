@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const User = require('../models/User');
-const { sendResetPasswordEmail } = require('../utils/sendEmail');
+const { sendResetPasswordEmail } = require('../src/utils/sendEmail');
 const generateTempPassword = require('../utils/generateTempPassword');
 
 const TEMP_PASSWORD_TTL_MS = 30 * 60 * 1000; // 30 minutes

@@ -4,14 +4,26 @@ const crypto = require('crypto');
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16; // 16 bytes for AES
 
+const isHex = (value) => typeof value === 'string' && /^[0-9a-fA-F]*$/.test(value);
+
+const isEncryptedValue = (value) => {
+  if (typeof value !== 'string') return false;
+  const parts = value.split(':');
+  return parts.length === 3 &&
+    parts[0].length === IV_LENGTH * 2 &&
+    parts[1].length === 32 &&
+    parts[2].length > 0 &&
+    parts[2].length % 2 === 0 &&
+    parts.every(isHex);
+};
+
 // Helper to get 32-byte encryption key buffer
 function getSecretKey() {
-  const envKey = process.env.ENCRYPTION_KEY || 'f6c77b2184d28d0959fcf533bfa86178c1b6985a9bc6942ad716a5efd082496a';
-  if (Buffer.byteLength(envKey, 'hex') === 32) {
-    return Buffer.from(envKey, 'hex');
+  const envKey = process.env.ENCRYPTION_KEY;
+  if (!envKey || !/^[0-9a-fA-F]{64}$/.test(envKey)) {
+    throw new Error('ENCRYPTION_KEY must be exactly 64 hexadecimal characters');
   }
-  // Fallback: derive 32 bytes using SHA-256
-  return crypto.createHash('sha256').update(String(envKey)).digest();
+  return Buffer.from(envKey, 'hex');
 }
 
 /**
@@ -48,6 +60,7 @@ function decrypt(encryptedBundle) {
 
   try {
     const [ivHex, authTagHex, encryptedHex] = parts;
+    if (!isEncryptedValue(encryptedBundle)) return encryptedBundle;
     const key = getSecretKey();
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
@@ -76,4 +89,5 @@ module.exports = {
   encrypt,
   decrypt,
   hashToken,
+  isEncryptedValue,
 };

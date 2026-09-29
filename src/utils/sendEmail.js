@@ -1,17 +1,14 @@
 const nodemailer = require('nodemailer');
 
-/**
- * Whether SMTP credentials are configured. When they aren't, callers should
- * fall back to a dev-friendly response instead of trying to send mail.
- */
 const isEmailConfigured = () => Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
 
 const createTransporter = () =>
   nodemailer.createTransport({
-    service: 'gmail',
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: process.env.SMTP_SECURE === undefined
+      ? Number(process.env.SMTP_PORT || 465) === 465
+      : process.env.SMTP_SECURE === 'true',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -24,6 +21,7 @@ const createTransporter = () =>
  * @param {string} resetUrl Full URL the user follows to reset their password
  */
 const sendResetPasswordEmail = async (toEmail, resetUrl) => {
+  if (!isEmailConfigured()) return null;
   const transporter = createTransporter();
 
   const mailOptions = {
