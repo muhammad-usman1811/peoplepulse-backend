@@ -57,9 +57,21 @@ const defaultAllowedOrigins = [
   'http://127.0.0.1:5000',
 ];
 
-const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(',').map((url) => url.trim()).filter(Boolean)
-  : defaultAllowedOrigins;
+// Vercel serves this API's own Swagger UI from its own domain, and
+// "Try it out" issues same-origin fetches that still carry an Origin
+// header (any POST/PUT/PATCH with a JSON body does, per the Fetch spec,
+// even same-origin) — so the API must always trust its own deployment
+// domain regardless of what CLIENT_URL is set to.
+const selfOrigins = [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+  .filter(Boolean)
+  .map((host) => `https://${host}`);
+
+const allowedOrigins = [
+  ...(process.env.CLIENT_URL
+    ? process.env.CLIENT_URL.split(',').map((url) => url.trim()).filter(Boolean)
+    : defaultAllowedOrigins),
+  ...selfOrigins,
+];
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
