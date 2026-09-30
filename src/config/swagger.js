@@ -1337,6 +1337,159 @@ const swaggerDocument = {
         },
       },
     },
+    '/performance/cycles': {
+      post: {
+        summary: 'Create Performance Review Cycle',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['period'],
+                properties: {
+                  period: { type: 'string', example: '2026-Q4' },
+                  status: { type: 'string', enum: ['open', 'closed'], default: 'open' },
+                  startDate: { type: 'string', format: 'date', example: '2026-10-01' },
+                  endDate: { type: 'string', format: 'date', example: '2026-12-31' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Performance cycle created successfully' },
+          400: { description: 'Validation error in cycle parameters' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Superadmin, Admin, or HR role required' },
+          409: { description: 'Cycle already exists for this period' },
+        },
+      },
+    },
+    '/performance/cycles/{cycleId}/reviews': {
+      post: {
+        summary: 'Submit Employee Self-Review with Goals and KPIs',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'cycleId', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of open Performance Cycle' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['selfReview', 'rating'],
+                properties: {
+                  selfReview: { type: 'string', example: 'Delivered core backend performance features and tests.' },
+                  rating: { type: 'integer', minimum: 1, maximum: 5, example: 4 },
+                  goals: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['title'],
+                      properties: {
+                        title: { type: 'string', example: 'Improve API response times' },
+                        description: { type: 'string', example: 'Optimize MongoDB indexing and queries' },
+                        status: { type: 'string', enum: ['not_started', 'in_progress', 'completed'], default: 'not_started' },
+                        kpis: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            required: ['name', 'target'],
+                            properties: {
+                              name: { type: 'string', example: 'P95 Latency (ms)' },
+                              target: { type: 'number', example: 150 },
+                              actual: { type: 'number', example: 120 },
+                              unit: { type: 'string', example: 'ms' },
+                              weight: { type: 'number', minimum: 0, maximum: 100, example: 50 },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Self-review submitted successfully' },
+          400: { description: 'Validation error in review/goals/kpis' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Only employees can submit self-review' },
+          404: { description: 'Open performance cycle not found' },
+          409: { description: 'Already submitted a review for this cycle' },
+        },
+      },
+    },
+    '/performance/team': {
+      get: {
+        summary: 'List Team Performance Reviews (Manager)',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 20 } },
+        ],
+        responses: {
+          200: { description: 'Team performance reviews retrieved successfully' },
+          401: { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/performance/reviews/{reviewId}': {
+      get: {
+        summary: 'Get Single Performance Review (Employee, Manager, or HR)',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'reviewId', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          200: { description: 'Performance review retrieved successfully' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden: only employee, assigned manager, or HR can view' },
+          404: { description: 'Review not found' },
+        },
+      },
+    },
+    '/performance/reviews/{reviewId}/manager-review': {
+      put: {
+        summary: 'Submit Manager Review and Rating',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'reviewId', required: true, schema: { type: 'string' } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['managerReview'],
+                properties: {
+                  managerReview: { type: 'string', example: 'Exceeded project milestones and showed strong leadership.' },
+                  rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Manager review submitted successfully' },
+          400: { description: 'Validation error or closed cycle' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Only assigned manager or HR can submit' },
+          404: { description: 'Review not found' },
+        },
+      },
+    },
   },
 };
 
