@@ -63,6 +63,18 @@ const reviewFixture = () => ({
 
 const asUser = (id, role = 'employee') => ({ _id: id, role });
 
+test('a self-review can be saved before a manager rating exists', () => {
+  const review = new Review({
+    cycle: ids.cycle,
+    employee: ids.employee,
+    selfReview: 'Completed the planned work.',
+    rating: 4,
+  });
+
+  assert.equal(review.validateSync(), undefined);
+  assert.equal(review.managerRating, null);
+});
+
 test.afterEach(() => {
   User.find = originalMethods.userFind;
   Review.find = originalMethods.reviewFind;

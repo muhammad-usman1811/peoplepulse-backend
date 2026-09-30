@@ -1,5 +1,6 @@
 const validator = require('validator');
 const User = require('../models/User');
+const SalaryStructure = require('../models/SalaryStructure');
 const Department = require('../models/Department');
 const Designation = require('../models/Designation');
 const Location = require('../models/Location');
@@ -24,6 +25,8 @@ const employeeFields = (employee) => ({
   designation: employee.designation,
   location: employee.location || '',
   status: employee.status || 'active',
+  salaryStructure: employee.salaryStructure?._id || employee.salaryStructure || null,
+  monthlySalary: employee.monthlySalary ?? null,
   manager: employee.manager
     ? { id: employee.manager._id, name: employee.manager.name, email: employee.manager.email }
     : null,
@@ -172,7 +175,7 @@ exports.getEmployee = async (req, res, next) => {
 
 exports.createEmployee = async (req, res, next) => {
   try {
-    const { name, email, password, employeeId, phoneNumber, department, designation, location, status, manager } = req.body;
+    const { name, email, password, employeeId, phoneNumber, department, designation, location, status, manager, salaryStructure, monthlySalary } = req.body;
     if (typeof name !== 'string' || !name.trim() || typeof email !== 'string' || !email.trim() || !validator.isEmail(email.trim()) || typeof password !== 'string' || password.length < 6 || password.length > 72) {
       return ApiResponse.error(res, 'Name, valid email, and password between 6 and 72 characters are required', null, 400);
     }
@@ -185,6 +188,11 @@ exports.createEmployee = async (req, res, next) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (await User.exists({ email: normalizedEmail })) return ApiResponse.error(res, 'An account with that email already exists', null, 409);
     if (status !== undefined && !['active', 'on-leave'].includes(status)) return ApiResponse.error(res, 'status must be active or on-leave', null, 400);
+    if ((salaryStructure === undefined) !== (monthlySalary === undefined)) return ApiResponse.error(res, 'salaryStructure and monthlySalary must be provided together', null, 400);
+    if (salaryStructure !== undefined) {
+      if (typeof monthlySalary !== 'number' || !Number.isFinite(monthlySalary) || monthlySalary <= 0) return ApiResponse.error(res, 'monthlySalary must be a positive number', null, 400);
+      if (!await SalaryStructure.exists({ _id: salaryStructure })) return ApiResponse.error(res, 'Salary structure not found', null, 404);
+    }
     const managerId = manager === undefined ? null : await validateManager(manager, null);
     const normalizedDepartment = await validateReference('department', department === undefined ? 'General' : department);
     const normalizedDesignation = await validateReference('designation', designation === undefined ? 'Team Member' : designation);
@@ -194,13 +202,14 @@ exports.createEmployee = async (req, res, next) => {
       employeeId: employeeId === undefined || employeeId === '' ? await nextEmployeeId() : employeeId,
       phoneNumber: phoneNumber || '', department: normalizedDepartment, designation: normalizedDesignation,
       location: normalizedLocation, status: status || 'active', manager: managerId,
+      salaryStructure: salaryStructure || null, monthlySalary: monthlySalary ?? null,
     });
     recordAudit({
       req,
       action: 'CREATE',
       resource: 'User',
       resourceId: employee._id,
-      meta: { changedFields: ['name', 'email', 'employeeId', 'department', 'designation', 'location', 'status', 'manager'] },
+      meta: { changedFields: ['name', 'email', 'employeeId', 'department', 'designation', 'location', 'status', 'manager', ...(salaryStructure !== undefined ? ['salaryStructure', 'monthlySalary'] : [])] },
     });
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee created successfully', { employee: employeeFields(result) }, 201);
@@ -212,7 +221,7 @@ exports.createEmployee = async (req, res, next) => {
 
 exports.updateEmployee = async (req, res, next) => {
   try {
-    const allowed = ['name', 'phoneNumber', 'employeeId', 'department', 'designation', 'location', 'status', 'manager', 'isActive'];
+    const allowed = ['name', 'phoneNumber', 'employeeId', 'department', 'designation', 'location', 'status', 'manager', 'isActive', 'salaryStructure', 'monthlySalary'];
     const updates = {};
     for (const field of allowed) if (req.body[field] !== undefined) updates[field] = req.body[field];
     if (updates.name !== undefined && (typeof updates.name !== 'string' || !updates.name.trim())) return ApiResponse.error(res, 'Name cannot be empty', null, 400);
@@ -250,8 +259,20 @@ exports.updateEmployee = async (req, res, next) => {
 
     const target = await findEmployeeTarget(req.params.id);
     if (!target) return ApiResponse.error(res, 'Employee not found', null, 404);
+    if (updates.salaryStructure !== undefined || updates.monthlySalary !== undefined) {
+      if (updates.salaryStructure === null && updates.monthlySalary === null) {
+        updates.salaryStructure = null;
+        updates.monthlySalary = null;
+      } else {
+        const salaryStructureId = updates.salaryStructure ?? target.salaryStructure;
+        const salary = updates.monthlySalary ?? target.monthlySalary;
+        if (typeof salary !== 'number' || !Number.isFinite(salary) || salary <= 0) return ApiResponse.error(res, 'monthlySalary must be a positive number', null, 400);
+        if (!salaryStructureId || !await SalaryStructure.exists({ _id: salaryStructureId })) return ApiResponse.error(res, 'A valid salaryStructure is required', null, 400);
+      }
+    }
+
     const before = {};
-    for (const field of ['employeeId', 'department', 'designation', 'location', 'status', 'manager', 'isActive']) {
+    for (const field of ['employeeId', 'department', 'designation', 'location', 'status', 'manager', 'isActive', 'salaryStructure', 'monthlySalary']) {
       if (updates[field] !== undefined || unset[field]) before[field] = target[field];
     }
     const updateOperation = { $set: updates };
