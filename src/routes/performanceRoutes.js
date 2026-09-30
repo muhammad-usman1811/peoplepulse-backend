@@ -8,6 +8,7 @@ router.use(protect);
 router.post('/cycles', authorize('superadmin', 'admin', 'hr'), performanceController.createCycle);
 router.post('/cycles/:cycleId/reviews', performanceController.submitSelfReview);
 router.get('/team/reviews', performanceController.listTeamReviews);
+router.get('/team', performanceController.listTeamReviews);
 router.get('/reviews/:reviewId', performanceController.getReview);
 router.put('/reviews/:reviewId/manager-review', performanceController.submitManagerReview);
 router.post('/reviews/:reviewId/manager-review', performanceController.submitManagerReview);

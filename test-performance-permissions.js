@@ -93,14 +93,18 @@ test('assigned manager can view the employee review', async () => {
   assert.equal(res.statusCode, 200);
 });
 
-test('HR can view any employee review', async () => {
-  Review.findById = () => createQuery(reviewFixture());
-  const res = await runController(controller.getReview, {
-    params: { reviewId: ids.review.toString() },
-    user: asUser(ids.hr, 'hr'),
-  });
+test('HR can view any employee review', async (t) => {
+  for (const role of ['hr', 'admin', 'superadmin']) {
+    await t.test(`role: ${role}`, async () => {
+      Review.findById = () => createQuery(reviewFixture());
+      const res = await runController(controller.getReview, {
+        params: { reviewId: ids.review.toString() },
+        user: asUser(ids.hr, role),
+      });
 
-  assert.equal(res.statusCode, 200);
+      assert.equal(res.statusCode, 200);
+    });
+  }
 });
 
 test('unrelated employee and unrelated manager cannot view a review', async (t) => {
