@@ -31,7 +31,13 @@ const ReviewSchema = new mongoose.Schema(
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     selfReview: { type: String, required: true, trim: true, maxlength: 5000 },
     managerReview: { type: String, trim: true, maxlength: 5000, default: '' },
-    managerRating: { type: Number, min: 1, max: 5, validate: Number.isInteger, default: null },
+    managerRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      validate: (value) => value === null || Number.isInteger(value),
+      default: null,
+    },
     rating: { type: Number, required: true, min: 1, max: 5, validate: Number.isInteger },
     goals: {
       type: [GoalSchema],

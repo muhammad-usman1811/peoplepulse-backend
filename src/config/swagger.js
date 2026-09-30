@@ -660,6 +660,8 @@ const swaggerDocument = {
               phoneNumber: { type: 'string', maxLength: 30, example: '+92 300 1234567' },
               department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
               manager: { type: 'string', nullable: true },
+              salaryStructure: { type: 'string', description: 'Salary structure ObjectId; provide with monthlySalary' },
+              monthlySalary: { type: 'number', exclusiveMinimum: 0, description: 'Monthly base used to calculate basic pay' },
               status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
             },
           } } },
@@ -683,7 +685,7 @@ const swaggerDocument = {
         summary: 'Update Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, isActive: { type: 'boolean' } },
+          type: 'object', properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, salaryStructure: { type: 'string', nullable: true }, monthlySalary: { type: 'number', nullable: true }, isActive: { type: 'boolean' } },
         } } } },
         responses: { 200: { description: 'Employee updated successfully' }, 400: { description: 'Invalid employee fields' }, 401: { description: 'Authentication required' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' }, 409: { description: 'Employee ID already exists' } },
       },
@@ -886,6 +888,22 @@ const swaggerDocument = {
         },
       },
     },
+    '/performance/team': {
+      get: {
+        summary: 'List Reviews for the Authenticated Manager Direct Reports (Compatibility Route)',
+        description: 'Compatibility alias for GET /performance/team/reviews - same handler, same response shape.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+        ],
+        responses: {
+          200: { description: 'Reviews for direct reports, with pagination metadata' },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
     '/performance/reviews/{reviewId}': {
       get: {
         summary: 'Get a Performance Review You Are Allowed to View',
@@ -899,6 +917,25 @@ const swaggerDocument = {
           403: { description: 'You are not authorized to view this review' },
           404: { description: 'Review not found' },
         },
+      },
+      put: {
+        summary: 'Submit or Update Manager Review (Compatibility Route)',
+        description: 'Compatibility alias for PUT /performance/reviews/{reviewId}/manager-review. Restricted to the assigned manager or HR/admin roles.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'reviewId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object', required: ['managerReview'], properties: {
+              managerReview: { type: 'string', maxLength: 5000 },
+              rating: { type: 'integer', minimum: 1, maximum: 5 },
+              managerRating: { type: 'integer', minimum: 1, maximum: 5 },
+              goals: { type: 'array', maxItems: 20, items: { type: 'object' } },
+            },
+          } } },
+        },
+        responses: { 200: { description: 'Manager review submitted successfully' }, 400: { description: 'Invalid review payload or closed cycle' }, 401: { description: 'Authentication required' }, 403: { description: 'Only assigned manager or HR can submit manager review' }, 404: { description: 'Review not found' } },
       },
     },
     '/performance/reviews/{reviewId}/manager-review': {
@@ -959,6 +996,25 @@ const swaggerDocument = {
           403: { description: 'Only assigned manager or HR can submit manager review' },
           404: { description: 'Review not found' },
         },
+      },
+      post: {
+        summary: 'Submit or Update Manager Review (Compatibility Route)',
+        description: 'Compatibility alias for PUT /performance/reviews/{reviewId}/manager-review. Restricted to the assigned manager or HR/admin roles.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'reviewId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object', required: ['managerReview'], properties: {
+              managerReview: { type: 'string', maxLength: 5000 },
+              rating: { type: 'integer', minimum: 1, maximum: 5 },
+              managerRating: { type: 'integer', minimum: 1, maximum: 5 },
+              goals: { type: 'array', maxItems: 20, items: { type: 'object' } },
+            },
+          } } },
+        },
+        responses: { 200: { description: 'Manager review submitted successfully' }, 400: { description: 'Invalid review payload or closed cycle' }, 401: { description: 'Authentication required' }, 403: { description: 'Only assigned manager or HR can submit manager review' }, 404: { description: 'Review not found' } },
       },
     },
     '/auth/forgot-password': {
@@ -1068,8 +1124,8 @@ const swaggerDocument = {
     },
     '/auth/register': {
       post: {
-        summary: 'Admin/HR Creates an Employee Account',
-        description: 'Creates an employee account for an authenticated superadmin, admin, or HR user. The created employee must log in separately; no employee token is returned.',
+        summary: 'Admin/HR Creates an Account',
+        description: 'Creates an employee account for an authenticated superadmin, admin, or HR user. Only admin and superadmin may assign role finance.',
         tags: ['Authentication'],
         security: [{ BearerAuth: [] }],
         requestBody: {
@@ -1085,6 +1141,7 @@ const swaggerDocument = {
                   password: { type: 'string', minLength: 6, maxLength: 72, example: 'NewSecurePassword123' },
                   department: { type: 'string', example: 'Product Engineering' },
                   designation: { type: 'string', example: 'Software Engineer' },
+                  role: { type: 'string', enum: ['employee', 'finance'], default: 'employee' },
                 },
               },
             },
@@ -1100,6 +1157,43 @@ const swaggerDocument = {
             description: 'Email already exists',
           },
         },
+      },
+    },
+    '/payroll/generate': {
+      post: {
+        summary: 'Generate Monthly Payslips',
+        description: 'Creates one pending payslip for every active employee. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per payslip.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: {
+          type: 'object', required: ['month'], properties: { month: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$', example: '2026-09' } },
+        } } } },
+        responses: {
+          201: { description: 'Payslips generated successfully' },
+          400: { description: 'Invalid month or an active employee lacks pay assignment' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR, admin, or superadmin role required' },
+          409: { description: 'A payslip already exists for the employee and month' },
+        },
+      },
+    },
+    '/payroll/payslips/{id}/approve': {
+      patch: {
+        summary: 'Approve Payslip',
+        description: 'Approves a pending payslip and records an audit entry. Finance role only.',
+        tags: ['Payroll'], security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Payslip approved' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance role required' }, 404: { description: 'Payslip not found' }, 409: { description: 'Payslip is no longer pending' } },
+      },
+    },
+    '/payroll/payslips/{id}/send-back': {
+      patch: {
+        summary: 'Send Payslip Back',
+        description: 'Returns a pending payslip for correction and records an audit entry. Finance role only.',
+        tags: ['Payroll'], security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { note: { type: 'string', maxLength: 500 } } } } } },
+        responses: { 200: { description: 'Payslip sent back' }, 400: { description: 'Invalid note' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance role required' }, 404: { description: 'Payslip not found' }, 409: { description: 'Payslip is no longer pending' } },
       },
     },
     '/payroll/salary-structure/{id}': {
@@ -1283,12 +1377,15 @@ const swaggerDocument = {
     '/reports/payroll-summary': {
       get: {
         summary: 'Get Payroll Summary',
-        description: 'Aggregates stored salary structures and configured allowances. This API does not store payroll runs or payouts. Restricted to superadmin, admin, and HR.',
+        description: 'Aggregates actual payslip totals and status counts from the Payslip collection. Optionally filter by month. Restricted to superadmin, admin, and HR.',
         tags: ['Reports'],
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'month', schema: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$', example: '2026-09' }, description: 'Optional payslip month filter in YYYY-MM format' },
+        ],
         responses: {
           200: {
-            description: 'Payroll summary retrieved successfully; data reflects salary structures and allowances, not payroll payments',
+            description: 'Payroll totals and payslip status breakdown retrieved successfully',
             content: {
               'application/json': {
                 schema: {
@@ -1298,14 +1395,18 @@ const swaggerDocument = {
                     data: {
                       type: 'object',
                       properties: {
-                        structureCount: { type: 'integer' },
-                        averageBasicPercentage: { type: 'number' },
-                        allowanceCount: { type: 'integer' },
-                        allowances: {
+                        month: { type: 'string', nullable: true, example: '2026-09' },
+                        totalPayslips: { type: 'integer', example: 12 },
+                        totalGrossPay: { type: 'number', example: 1200000 },
+                        totalDeductions: { type: 'number', example: 80000 },
+                        totalNetPay: { type: 'number', example: 1120000 },
+                        averageNetPay: { type: 'number', example: 93333.33 },
+                        byStatus: {
                           type: 'object',
                           properties: {
-                            fixed: { type: 'object', properties: { count: { type: 'integer' }, totalValue: { type: 'number' } } },
-                            percentage: { type: 'object', properties: { count: { type: 'integer' }, totalValue: { type: 'number' } } },
+                            pending: { type: 'integer' },
+                            approved: { type: 'integer' },
+                            sent_back: { type: 'integer' },
                           },
                         },
                       },
@@ -1317,6 +1418,7 @@ const swaggerDocument = {
           },
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'HR/Admin role required' },
+          400: { description: 'month must use YYYY-MM format' },
         },
       },
     },

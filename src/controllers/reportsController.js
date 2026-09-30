@@ -1,6 +1,6 @@
 const Attendance = require('../models/Attendance');
 const LeaveRequest = require('../models/LeaveRequest');
-const SalaryStructure = require('../models/SalaryStructure');
+const Payslip = require('../models/Payslip');
 const ApiResponse = require('../utils/apiResponse');
 
 const parseDateRange = (query, field) => {
@@ -77,42 +77,51 @@ exports.getLeaveSummary = async (req, res, next) => {
 
 exports.getPayrollSummary = async (req, res, next) => {
   try {
-    const [result] = await SalaryStructure.aggregate([
+    const { month } = req.query;
+    if (month !== undefined && (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))) {
+      return ApiResponse.error(res, 'month must use YYYY-MM format', null, 400);
+    }
+
+    const match = month ? { month } : {};
+    const [result] = await Payslip.aggregate([
+      { $match: match },
       {
         $facet: {
           totals: [{
             $group: {
               _id: null,
-              structureCount: { $sum: 1 },
-              averageBasicPercentage: { $avg: '$basicPercentage' },
-              allowanceCount: { $sum: { $size: { $ifNull: ['$allowances', []] } } },
+              totalPayslips: { $sum: 1 },
+              totalGrossPay: { $sum: '$grossPay' },
+              totalDeductions: { $sum: '$deductions' },
+              totalNetPay: { $sum: '$netPay' },
+              averageNetPay: { $avg: '$netPay' },
             },
           }],
-          allowances: [
-            { $unwind: '$allowances' },
-            {
-              $group: {
-                _id: '$allowances.type',
-                count: { $sum: 1 },
-                totalValue: { $sum: '$allowances.value' },
-              },
-            },
-          ],
+          byStatus: [{ $group: { _id: '$status', count: { $sum: 1 } } }],
         },
       },
     ]);
-    const totals = result.totals[0] || { structureCount: 0, averageBasicPercentage: 0, allowanceCount: 0 };
-    const allowanceSummary = { fixed: { count: 0, totalValue: 0 }, percentage: { count: 0, totalValue: 0 } };
-    for (const allowance of result.allowances) {
-      if (allowanceSummary[allowance._id]) {
-        allowanceSummary[allowance._id] = { count: allowance.count, totalValue: allowance.totalValue };
-      }
+
+    const totals = result?.totals?.[0] || {
+      totalPayslips: 0,
+      totalGrossPay: 0,
+      totalDeductions: 0,
+      totalNetPay: 0,
+      averageNetPay: 0,
+    };
+    const byStatus = { pending: 0, approved: 0, sent_back: 0 };
+    for (const status of result?.byStatus || []) {
+      byStatus[status._id] = status.count;
     }
+
     return ApiResponse.success(res, 'Payroll summary retrieved successfully', {
-      structureCount: totals.structureCount,
-      averageBasicPercentage: Number((totals.averageBasicPercentage || 0).toFixed(2)),
-      allowanceCount: totals.allowanceCount,
-      allowances: allowanceSummary,
+      month: month || null,
+      totalPayslips: totals.totalPayslips,
+      totalGrossPay: totals.totalGrossPay,
+      totalDeductions: totals.totalDeductions,
+      totalNetPay: totals.totalNetPay,
+      averageNetPay: Number((totals.averageNetPay || 0).toFixed(2)),
+      byStatus,
     });
   } catch (err) {
     next(err);

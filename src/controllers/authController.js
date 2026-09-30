@@ -13,6 +13,14 @@ const recordAudit = require('../utils/recordAudit');
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, department, designation } = req.body;
+    const role = req.body.role || 'employee';
+
+    if (role !== 'employee' && role !== 'finance') {
+      return ApiResponse.error(res, 'Only employee or finance roles may be registered', null, 400);
+    }
+    if (role === 'finance' && !['superadmin', 'admin'].includes(req.user.role)) {
+      return ApiResponse.error(res, 'Only admin or superadmin may assign the finance role', null, 403);
+    }
 
     // Validate presence
     if (
@@ -50,7 +58,7 @@ exports.register = async (req, res, next) => {
       name,
       email: normalizedEmail,
       password,
-      role: 'employee',
+      role,
       department: department || 'General',
       designation: designation || 'Team Member',
     });
@@ -59,7 +67,7 @@ exports.register = async (req, res, next) => {
       action: 'CREATE',
       resource: 'User',
       resourceId: user._id,
-      meta: { source: 'admin_registration', changedFields: ['name', 'email', 'department', 'designation'] },
+      meta: { source: 'admin_registration', changedFields: ['name', 'email', 'department', 'designation', 'role'] },
     });
 
     return ApiResponse.success(

@@ -6,14 +6,21 @@ const {
   createSalaryStructure,
   updateSalaryStructure,
   deleteSalaryStructure,
+  generatePayslips,
+  approvePayslip,
+  sendBackPayslip,
 } = require('../controllers/payrollController');
 
 const router = express.Router();
 
-// Only HR roles and above may manage payroll data
+// HR roles manage payroll setup; Finance controls payslip decisions.
 const managePayroll = authorize('superadmin', 'admin', 'hr');
 
-router.use(protect, managePayroll);
+router.use(protect);
+
+router.post('/generate', managePayroll, generatePayslips);
+router.patch('/payslips/:id/approve', authorize('finance'), approvePayslip);
+router.patch('/payslips/:id/send-back', authorize('finance'), sendBackPayslip);
 
 // Salary Structure CRUD
 // GET    /api/payroll/salary-structure          — list all grades
@@ -23,13 +30,13 @@ router.use(protect, managePayroll);
 // DELETE /api/payroll/salary-structure/:id      — delete a grade
 router
   .route('/salary-structure')
-  .get(listSalaryStructures)
-  .post(createSalaryStructure);
+  .get(managePayroll, listSalaryStructures)
+  .post(managePayroll, createSalaryStructure);
 
 router
   .route('/salary-structure/:id')
-  .get(getSalaryStructure)
-  .put(updateSalaryStructure)
-  .delete(deleteSalaryStructure);
+  .get(managePayroll, getSalaryStructure)
+  .put(managePayroll, updateSalaryStructure)
+  .delete(managePayroll, deleteSalaryStructure);
 
 module.exports = router;

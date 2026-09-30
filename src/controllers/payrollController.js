@@ -1,4 +1,6 @@
 const SalaryStructure = require('../models/SalaryStructure');
+const User = require('../models/User');
+const Payslip = require('../models/Payslip');
 const AuditLog = require('../models/AuditLog');
 const ApiResponse = require('../utils/apiResponse');
 
@@ -29,6 +31,112 @@ const actorFrom = (req) => ({
   actorRole: req.user.role || '',
   req,
 });
+
+const roundMoney = (amount) => Math.round((amount + Number.EPSILON) * 100) / 100;
+
+const calculatePayslip = (monthlySalary, salaryStructure) => {
+  const basicPay = roundMoney(monthlySalary * salaryStructure.basicPercentage / 100);
+  const allowances = salaryStructure.allowances.map((allowance) => ({
+    name: allowance.name,
+    type: allowance.type,
+    value: allowance.value,
+    amount: roundMoney(allowance.type === 'fixed' ? allowance.value : basicPay * allowance.value / 100),
+  }));
+  const grossPay = roundMoney(basicPay + allowances.reduce((total, allowance) => total + allowance.amount, 0));
+  return { basicPay, allowances, grossPay, deductions: 0, netPay: grossPay };
+};
+
+const validMonth = (month) => typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+
+exports.calculatePayslip = calculatePayslip;
+
+exports.generatePayslips = async (req, res, next) => {
+  try {
+    const { month } = req.body;
+    if (!validMonth(month)) return ApiResponse.error(res, 'month must use YYYY-MM format', null, 400);
+
+    const employees = await User.find({ role: 'employee', isActive: true })
+      .populate('salaryStructure');
+    const unassignedEmployees = employees.filter((employee) => (
+      !employee.salaryStructure || typeof employee.monthlySalary !== 'number' || employee.monthlySalary <= 0
+    ));
+    if (unassignedEmployees.length) {
+      return ApiResponse.error(res, 'Every active employee must have a salary structure and positive monthly salary before payroll generation', {
+        employeeIds: unassignedEmployees.map((employee) => employee._id),
+      }, 400);
+    }
+
+    for (const employee of employees) {
+      if (await Payslip.exists({ employee: employee._id, month })) {
+        return ApiResponse.error(res, `A payslip already exists for ${month}`, null, 409);
+      }
+    }
+
+    const payslips = [];
+    for (const employee of employees) {
+      const amounts = calculatePayslip(employee.monthlySalary, employee.salaryStructure);
+      const payslip = await Payslip.create({
+        employee: employee._id,
+        month,
+        salaryStructure: { id: employee.salaryStructure._id, grade: employee.salaryStructure.grade },
+        monthlySalary: employee.monthlySalary,
+        ...amounts,
+      });
+      await AuditLog.record({
+        ...actorFrom(req),
+        action: 'CREATE',
+        resource: 'Payslip',
+        resourceId: payslip._id,
+        meta: { employee: employee._id, month, grossPay: payslip.grossPay, netPay: payslip.netPay },
+      });
+      payslips.push(payslip);
+    }
+
+    return ApiResponse.success(res, 'Payslips generated successfully.', { payslips, count: payslips.length }, 201);
+  } catch (err) {
+    if (err.code === 11000) return ApiResponse.error(res, 'A payslip already exists for this employee and month', null, 409);
+    next(err);
+  }
+};
+
+const decidePayslip = (decision) => async (req, res, next) => {
+  try {
+    if (decision === 'send_back' && req.body.note !== undefined && typeof req.body.note !== 'string') {
+      return ApiResponse.error(res, 'note must be a string', null, 400);
+    }
+    if (decision === 'send_back' && req.body.note?.length > 500) {
+      return ApiResponse.error(res, 'note must not exceed 500 characters', null, 400);
+    }
+    const existing = await Payslip.findById(req.params.id);
+    if (!existing) return ApiResponse.error(res, 'Payslip not found.', null, 404);
+    if (existing.status !== 'pending') return ApiResponse.error(res, 'Only pending payslips can be decided.', null, 409);
+
+    const updates = decision === 'approve'
+      ? { status: 'approved', approvedBy: req.user._id, approvedAt: new Date(), decisionNote: '' }
+      : { status: 'sent_back', decisionNote: req.body.note?.trim() || '' };
+    const payslip = await Payslip.findOneAndUpdate(
+      { _id: existing._id, status: 'pending' },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    if (!payslip) return ApiResponse.error(res, 'Payslip has already been decided.', null, 409);
+
+    await AuditLog.record({
+      ...actorFrom(req),
+      action: decision === 'approve' ? 'APPROVE' : 'REJECT',
+      resource: 'Payslip',
+      resourceId: payslip._id,
+      meta: { month: payslip.month, employee: payslip.employee, status: payslip.status, note: payslip.decisionNote },
+    });
+    return ApiResponse.success(res, decision === 'approve' ? 'Payslip approved.' : 'Payslip sent back.', { payslip });
+  } catch (err) {
+    if (err.name === 'CastError') return ApiResponse.error(res, 'Invalid payslip ID.', null, 400);
+    next(err);
+  }
+};
+
+exports.approvePayslip = decidePayslip('approve');
+exports.sendBackPayslip = decidePayslip('send_back');
 
 // ---------------------------------------------------------------------------
 // GET /api/payroll/salary-structure
