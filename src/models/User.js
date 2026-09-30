@@ -59,7 +59,7 @@ const UserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['superadmin', 'admin', 'hr', 'employee'],
+      enum: ['superadmin', 'admin', 'hr', 'finance', 'employee'],
       default: 'employee',
     },
     department: {
@@ -87,6 +87,16 @@ const UserSchema = new mongoose.Schema(
     manager: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      default: null,
+    },
+    salaryStructure: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SalaryStructure',
+      default: null,
+    },
+    monthlySalary: {
+      type: Number,
+      min: [0, 'Monthly salary cannot be negative'],
       default: null,
     },
     notificationPreferences: {
