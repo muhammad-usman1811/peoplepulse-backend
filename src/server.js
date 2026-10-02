@@ -19,6 +19,7 @@ const { leaveRoutes, wfhRoutes } = require('./routes/requestRoutes');
 const performanceRoutes = require('./routes/performanceRoutes');
 const auditLogRoutes = require('./routes/auditLogRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
+const recruitmentRoutes = require('./routes/recruitmentRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
@@ -40,8 +41,9 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'script-src': ["'self'", 'https://cdn.jsdelivr.net'],
+        'script-src': ["'self'", 'https://cdn.jsdelivr.net', "'unsafe-inline'", "'unsafe-eval'"],
         'style-src': ["'self'", 'https:', "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:', 'https:'],
       },
     },
   })
@@ -114,12 +116,17 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Body parsers
+app.use('/api/performance', express.json({ limit: '256kb' }));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Swagger Interactive API Documentation UI
-// Assets load from a CDN because swagger-ui-express static files are not bundled on Vercel
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerDocument);
+});
+
 const SWAGGER_CDN = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5';
 app.use(
   '/api-docs',
@@ -160,6 +167,7 @@ app.use('/api/leave-requests', leaveRoutes);
 app.use('/api/wfh-requests', wfhRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/recruitment', recruitmentRoutes);
 app.use('/api/audit-log', auditLogRoutes);
 
 // 404 Route Not Found Handler

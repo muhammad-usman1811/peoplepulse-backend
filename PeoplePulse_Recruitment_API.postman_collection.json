@@ -1,0 +1,200 @@
+{
+  "info": {
+    "name": "PeoplePulse Recruitment Pipeline API",
+    "description": "Creates a job posting and candidate, then verifies every supported recruitment stage and invalid-input handling.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "hrEmail", "value": "admin@peoplepulse.com" },
+    { "key": "hrPassword", "value": "replace_with_test_admin_password" },
+    { "key": "hrToken", "value": "" },
+    { "key": "jobPostingId", "value": "" },
+    { "key": "candidateId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login HR / Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HR/admin login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('hrToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{hrEmail}}\",\n  \"password\": \"{{hrPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Create Job Posting",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('job posting is created', function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) {",
+              "  const jobPosting = pm.response.json().data.jobPosting;",
+              "  pm.expect(jobPosting.title).to.not.be.empty;",
+              "  pm.expect(jobPosting.department).to.eql('Engineering');",
+              "  pm.collectionVariables.set('jobPostingId', jobPosting._id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Backend Engineer {{$guid}}\",\n  \"department\": \" Engineering \"\n}"
+        },
+        "url": "{{baseUrl}}/recruitment/job-postings"
+      }
+    },
+    {
+      "name": "Reject Job Posting Without Department",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('department is required', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"Incomplete Posting\"\n}" },
+        "url": "{{baseUrl}}/recruitment/job-postings"
+      }
+    },
+    {
+      "name": "Reject Job Posting Without Title",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('title is required', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"department\": \"Engineering\"\n}" },
+        "url": "{{baseUrl}}/recruitment/job-postings"
+      }
+    },
+    {
+      "name": "Add Candidate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('candidate is added in Applied stage', function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) {",
+              "  const candidate = pm.response.json().data.candidate;",
+              "  pm.expect(candidate.stage).to.eql('Applied');",
+              "  pm.collectionVariables.set('candidateId', candidate._id);",
+              "  pm.collectionVariables.set('candidateEmail', candidate.email);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Alex Candidate\",\n  \"email\": \"alex.{{$guid}}@example.test\",\n  \"jobPosting\": \"{{jobPostingId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/recruitment/candidates"
+      }
+    },
+    {
+      "name": "Reject Duplicate Candidate On Same Posting (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('duplicate candidate returns 409 conflict', function () { pm.response.to.have.status(409); });",
+              "pm.test('error message indicates candidate already applied', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.message).to.eql('Candidate already applied to this posting');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Alex Candidate Duplicate\",\n  \"email\": \"{{candidateEmail}}\",\n  \"jobPosting\": \"{{jobPostingId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/recruitment/candidates"
+      }
+    },
+    {
+      "name": "Move Candidate to Screening",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('candidate moved to Screening', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.candidate.stage).to.eql('Screening'); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{hrToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stage\": \"Screening\"\n}" }, "url": "{{baseUrl}}/recruitment/candidates/{{candidateId}}/stage" }
+    },
+    {
+      "name": "Move Candidate to Interview",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('candidate moved to Interview', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.candidate.stage).to.eql('Interview'); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{hrToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stage\": \"Interview\"\n}" }, "url": "{{baseUrl}}/recruitment/candidates/{{candidateId}}/stage" }
+    },
+    {
+      "name": "Move Candidate to Offer",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('candidate moved to Offer', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.candidate.stage).to.eql('Offer'); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{hrToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stage\": \"Offer\"\n}" }, "url": "{{baseUrl}}/recruitment/candidates/{{candidateId}}/stage" }
+    },
+    {
+      "name": "Move Candidate to Hired",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('candidate moved to Hired', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.candidate.stage).to.eql('Hired'); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{hrToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stage\": \"Hired\"\n}" }, "url": "{{baseUrl}}/recruitment/candidates/{{candidateId}}/stage" }
+    },
+    {
+      "name": "Reject Unsupported Candidate Stage",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('unsupported stage is rejected', function () { pm.response.to.have.status(400); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{hrToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stage\": \"Rejected\"\n}" }, "url": "{{baseUrl}}/recruitment/candidates/{{candidateId}}/stage" }
+    }
+  ]
+}

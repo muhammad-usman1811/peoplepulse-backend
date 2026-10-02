@@ -11,9 +11,12 @@ const connectDB = async () => {
     if (process.env.NODE_ENV === 'production' && !process.env.MONGO_URI) {
       throw new Error('MONGO_URI must be configured in production');
     }
-    const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/peoplepulse';
+    const mongoURI =
+      process.env.NODE_ENV === 'test'
+        ? process.env.MONGO_TEST_URI || process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/peoplepulse_test'
+        : process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/peoplepulse';
     if (process.env.NODE_ENV === 'test' && !isTestMongoUri(mongoURI)) {
-      throw new Error('NODE_ENV=test requires MONGO_URI to use a database name ending in _test');
+      throw new Error('NODE_ENV=test requires MONGO_URI or MONGO_TEST_URI to use a database name ending in _test');
     }
     const conn = await mongoose.connect(mongoURI);
 
