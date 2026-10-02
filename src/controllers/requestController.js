@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
 const ApiResponse = require('../utils/apiResponse');
+const notify = require('../utils/notify');
 
 const requestFields = (request) => ({
   id: request._id,
@@ -138,6 +139,16 @@ const decide = async (Model, label, req, res, next, status) => {
       meta: { status, decisionNote: request.decisionNote, employee: request.employee },
       req,
     });
+    if (Model.modelName === 'LeaveRequest') {
+      try {
+        const outcome = status === 'approved' ? 'approved' : 'rejected';
+        const note = request.decisionNote ? ` Note: ${request.decisionNote}` : '';
+        const title = status === 'approved' ? 'Leave request approved' : 'Leave request rejected';
+        await notify(request.employee, `leave_${outcome}`, title, `Your ${request.type} leave request was ${outcome}.${note}`);
+      } catch (notificationError) {
+        console.error('Failed to notify employee about leave decision:', notificationError);
+      }
+    }
     const result = await populated(Model, { _id: request._id });
     return ApiResponse.success(res, `${label} request ${status} successfully`, { request: requestFields(result) });
   } catch (err) {

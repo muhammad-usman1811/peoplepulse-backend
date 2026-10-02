@@ -211,6 +211,50 @@ const swaggerDocument = {
         },
       },
     },
+    '/notifications': {
+      get: {
+        summary: 'List Notifications',
+        description: 'Returns notifications for the authenticated user, newest first. Use unread=true to return only unread items.',
+        tags: ['Notifications'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+          { in: 'query', name: 'unread', schema: { type: 'string', enum: ['true', 'false'] } },
+        ],
+        responses: {
+          200: { description: 'Notifications retrieved successfully' },
+          400: { description: 'Invalid unread filter' },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
+    '/notifications/read-all': {
+      patch: {
+        summary: 'Mark All Notifications Read',
+        description: 'Marks all unread notifications belonging to the authenticated user as read.',
+        tags: ['Notifications'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Notifications marked as read' },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
+    '/notifications/{id}/read': {
+      patch: {
+        summary: 'Mark Notification Read',
+        description: 'Marks an owned notification as read. Notifications belonging to another user are not disclosed.',
+        tags: ['Notifications'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Notification marked as read' },
+          401: { description: 'Authentication required' },
+          404: { description: 'Notification not found' },
+        },
+      },
+    },
     '/org/departments': {
       get: {
         summary: 'List Departments',
@@ -1162,7 +1206,7 @@ const swaggerDocument = {
     '/payroll/generate': {
       post: {
         summary: 'Generate Monthly Payslips',
-        description: 'Creates one pending payslip for every active employee. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per payslip.',
+        description: 'Creates pending payslips for active employees who do not already have one for the month. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
         tags: ['Payroll'],
         security: [{ BearerAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
@@ -1170,10 +1214,11 @@ const swaggerDocument = {
         } } } },
         responses: {
           201: { description: 'Payslips generated successfully' },
+          200: { description: 'No new payslips were needed' },
           400: { description: 'Invalid month or an active employee lacks pay assignment' },
           401: { description: 'Authentication required' },
           403: { description: 'HR, admin, or superadmin role required' },
-          409: { description: 'A payslip already exists for the employee and month' },
+          409: { description: 'Concurrent generation created a duplicate payslip' },
         },
       },
     },
@@ -1184,6 +1229,31 @@ const swaggerDocument = {
         tags: ['Payroll'], security: [{ BearerAuth: [] }],
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: { 200: { description: 'Payslip approved' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance role required' }, 404: { description: 'Payslip not found' }, 409: { description: 'Payslip is no longer pending' } },
+      },
+    },
+    '/payroll/payslips': {
+      get: {
+        summary: 'List Payslips',
+        description: 'Finance, HR, admin, and superadmin can view all payslips. Employees can view only their own. Supports optional month and status filters and pagination.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+          { in: 'query', name: 'month', schema: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' } },
+          { in: 'query', name: 'status', schema: { type: 'string', enum: ['pending', 'approved', 'sent_back'] } },
+        ],
+        responses: { 200: { description: 'Payslips retrieved successfully' }, 400: { description: 'Invalid month or status' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance, HR, admin, superadmin, or employee role required' } },
+      },
+    },
+    '/payroll/payslips/{id}': {
+      get: {
+        summary: 'Get Payslip',
+        description: 'Finance, HR, admin, and superadmin can view any payslip. Employees can view only their own.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Payslip retrieved successfully' }, 400: { description: 'Invalid payslip ID' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance, HR, admin, superadmin, or employee role required' }, 404: { description: 'Payslip not found' } },
       },
     },
     '/payroll/payslips/{id}/send-back': {

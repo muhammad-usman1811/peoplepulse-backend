@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const User = require('./src/models/User');
 const LeaveRequest = require('./src/models/LeaveRequest');
 const WfhRequest = require('./src/models/WfhRequest');
+const Notification = require('./src/models/Notification');
+const AuditLog = require('./src/models/AuditLog');
 const controller = require('./src/controllers/requestController');
 
 const original = {
@@ -13,6 +15,9 @@ const original = {
   leaveFind: LeaveRequest.find,
   leaveFindOne: LeaveRequest.findOne,
   leaveFindOneAndUpdate: LeaveRequest.findOneAndUpdate,
+  auditRecord: AuditLog.record,
+  notificationCreate: Notification.create,
+  consoleError: console.error,
   wfhExists: WfhRequest.exists,
   wfhCreate: WfhRequest.create,
   wfhFind: WfhRequest.find,
@@ -73,6 +78,9 @@ test.afterEach(() => {
   LeaveRequest.find = original.leaveFind;
   LeaveRequest.findOne = original.leaveFindOne;
   LeaveRequest.findOneAndUpdate = original.leaveFindOneAndUpdate;
+  AuditLog.record = original.auditRecord;
+  Notification.create = original.notificationCreate;
+  console.error = original.consoleError;
   WfhRequest.exists = original.wfhExists;
   WfhRequest.create = original.wfhCreate;
   WfhRequest.find = original.wfhFind;
@@ -184,6 +192,71 @@ test('a processed request cannot be decided again', async () => {
 
   assert.equal(res.statusCode, 404);
   assert.equal(decisionFilter.status, 'pending');
+});
+
+test('approving leave creates a notification for the employee', async () => {
+  let notification;
+  LeaveRequest.findOneAndUpdate = async (_filter, update) => ({
+    ...requestRecord(),
+    employee: ids.employee,
+    ...update.$set,
+  });
+  LeaveRequest.findOne = () => query(requestRecord());
+  AuditLog.record = async () => {};
+  Notification.create = async (values) => {
+    notification = new Notification(values);
+    await notification.validate();
+    return notification;
+  };
+
+  const res = await runController(controller.leave.approve, employeeRequest({
+    user: { _id: ids.manager, role: 'admin' },
+  }));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(String(notification.userId), String(ids.employee));
+  assert.equal(notification.type, 'leave_approved');
+  assert.match(notification.body, /annual leave request was approved/);
+});
+
+test('leave rejection notifies the employee with the decision note', async () => {
+  let notification;
+  LeaveRequest.findOneAndUpdate = async (_filter, update) => ({
+    ...requestRecord(),
+    employee: ids.employee,
+    ...update.$set,
+  });
+  LeaveRequest.findOne = () => query(requestRecord());
+  AuditLog.record = async () => {};
+  Notification.create = async (values) => { notification = values; return values; };
+
+  const res = await runController(controller.leave.reject, employeeRequest({
+    body: { note: 'Please choose different dates.' },
+    user: { _id: ids.manager, role: 'admin' },
+  }));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(notification.type, 'leave_rejected');
+  assert.match(notification.body, /Please choose different dates\./);
+});
+
+test('leave approval succeeds when notification delivery fails', async () => {
+  LeaveRequest.findOneAndUpdate = async (_filter, update) => ({
+    ...requestRecord(),
+    employee: ids.employee,
+    ...update.$set,
+  });
+  LeaveRequest.findOne = () => query({ ...requestRecord(), status: 'approved' });
+  AuditLog.record = async () => {};
+  Notification.create = async () => { throw new Error('notification database unavailable'); };
+  console.error = () => {};
+
+  const res = await runController(controller.leave.approve, employeeRequest({
+    user: { _id: ids.manager, role: 'admin' },
+  }));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.request.status, 'approved');
 });
 
 test('employees can list only their own leave requests', async () => {

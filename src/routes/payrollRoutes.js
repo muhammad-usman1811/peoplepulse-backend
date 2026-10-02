@@ -7,6 +7,8 @@ const {
   updateSalaryStructure,
   deleteSalaryStructure,
   generatePayslips,
+  listPayslips,
+  getPayslip,
   approvePayslip,
   sendBackPayslip,
 } = require('../controllers/payrollController');
@@ -19,6 +21,8 @@ const managePayroll = authorize('superadmin', 'admin', 'hr');
 router.use(protect);
 
 router.post('/generate', managePayroll, generatePayslips);
+router.get('/payslips', authorize('finance', 'employee', 'hr', 'admin', 'superadmin'), listPayslips);
+router.get('/payslips/:id', authorize('finance', 'employee', 'hr', 'admin', 'superadmin'), getPayslip);
 router.patch('/payslips/:id/approve', authorize('finance'), approvePayslip);
 router.patch('/payslips/:id/send-back', authorize('finance'), sendBackPayslip);
 
