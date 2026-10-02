@@ -19,20 +19,30 @@ const normalizeGoals = (goals) => {
   if (goals === undefined || goals === null) return [];
   if (!Array.isArray(goals) || goals.length > 20) return null;
 
+  const goalTitles = new Set();
   const normalized = [];
   for (const goal of goals) {
     if (!goal || typeof goal !== 'object' || Array.isArray(goal)) return null;
     if (typeof goal.title !== 'string' || !goal.title.trim() || goal.title.trim().length > 200) return null;
+    const title = goal.title.trim();
+    const titleKey = title.toLowerCase();
+    if (goalTitles.has(titleKey)) return null;
+    goalTitles.add(titleKey);
     if (goal.description !== undefined && (typeof goal.description !== 'string' || goal.description.length > 1000)) return null;
     const status = goal.status === undefined ? 'not_started' : goal.status;
     if (!goalStatuses.includes(status)) return null;
     const kpis = goal.kpis === undefined ? [] : goal.kpis;
     if (!Array.isArray(kpis) || kpis.length > 20) return null;
 
+    const kpiNames = new Set();
     const normalizedKpis = [];
     for (const kpi of kpis) {
       if (!kpi || typeof kpi !== 'object' || Array.isArray(kpi)) return null;
       if (typeof kpi.name !== 'string' || !kpi.name.trim() || kpi.name.trim().length > 120) return null;
+      const name = kpi.name.trim();
+      const nameKey = name.toLowerCase();
+      if (kpiNames.has(nameKey)) return null;
+      kpiNames.add(nameKey);
       if (typeof kpi.target !== 'number' || !Number.isFinite(kpi.target)) return null;
       if (kpi.actual !== undefined && kpi.actual !== null && (typeof kpi.actual !== 'number' || !Number.isFinite(kpi.actual))) return null;
       if (kpi.unit !== undefined && (typeof kpi.unit !== 'string' || kpi.unit.length > 40)) return null;
@@ -40,7 +50,7 @@ const normalizeGoals = (goals) => {
       if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0 || weight > 100) return null;
 
       normalizedKpis.push({
-        name: kpi.name.trim(),
+        name,
         target: kpi.target,
         actual: kpi.actual === undefined ? null : kpi.actual,
         unit: kpi.unit === undefined ? '' : kpi.unit.trim(),
@@ -49,7 +59,7 @@ const normalizeGoals = (goals) => {
     }
 
     normalized.push({
-      title: goal.title.trim(),
+      title,
       description: goal.description === undefined ? '' : goal.description.trim(),
       status,
       kpis: normalizedKpis,
@@ -57,6 +67,111 @@ const normalizeGoals = (goals) => {
   }
 
   return normalized;
+};
+
+const normalizeManagerGoalUpdates = (goals) => {
+  if (!Array.isArray(goals) || goals.length > 20) return null;
+
+  const normalized = [];
+  for (const goal of goals) {
+    if (!goal || typeof goal !== 'object' || Array.isArray(goal)) return null;
+    if (typeof goal.title !== 'string' || !goal.title.trim() || goal.title.trim().length > 200) return null;
+    if (goal.status !== undefined && !goalStatuses.includes(goal.status)) return null;
+    const kpis = goal.kpis === undefined ? [] : goal.kpis;
+    if (!Array.isArray(kpis) || kpis.length > 20) return null;
+
+    const normalizedKpis = [];
+    for (const kpi of kpis) {
+      if (!kpi || typeof kpi !== 'object' || Array.isArray(kpi)) return null;
+      if (typeof kpi.name !== 'string' || !kpi.name.trim() || kpi.name.trim().length > 120) return null;
+      if (kpi.actual !== undefined && kpi.actual !== null && (typeof kpi.actual !== 'number' || !Number.isFinite(kpi.actual))) return null;
+      normalizedKpis.push({ name: kpi.name.trim(), actual: kpi.actual });
+    }
+
+    normalized.push({ title: goal.title.trim(), status: goal.status, kpis: normalizedKpis });
+  }
+
+  return normalized;
+};
+
+const applyManagerGoalUpdates = (existingGoals, updates) => {
+  const normalized = normalizeManagerGoalUpdates(updates);
+  if (!normalized || !Array.isArray(existingGoals)) return null;
+
+  const operations = [];
+  for (const update of normalized) {
+    const goalTitleKey = update.title.trim().toLowerCase();
+    const matchingGoals = existingGoals.filter((goal) => goal.title.trim().toLowerCase() === goalTitleKey);
+    if (matchingGoals.length !== 1) return null;
+    const goal = matchingGoals[0];
+    const kpiOperations = [];
+
+    for (const kpiUpdate of update.kpis) {
+      const kpiNameKey = kpiUpdate.name.trim().toLowerCase();
+      const matchingKpis = goal.kpis.filter((kpi) => kpi.name.trim().toLowerCase() === kpiNameKey);
+      if (matchingKpis.length !== 1) return null;
+      kpiOperations.push({ kpi: matchingKpis[0], actual: kpiUpdate.actual });
+    }
+
+    operations.push({ goal, status: update.status, kpiOperations });
+  }
+
+  for (const operation of operations) {
+    if (operation.status !== undefined) operation.goal.status = operation.status;
+    for (const kpiOperation of operation.kpiOperations) {
+      if (kpiOperation.actual !== undefined) kpiOperation.kpi.actual = kpiOperation.actual;
+    }
+  }
+
+  return existingGoals;
+};
+
+exports.listCycles = async (req, res, next) => {
+  try {
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
+    if (req.query.status !== undefined && !cycleStatuses.includes(req.query.status)) {
+      return ApiResponse.error(res, 'status must be open or closed', null, 400);
+    }
+
+    const filter = req.query.status ? { status: req.query.status } : {};
+    const [cycles, total] = await Promise.all([
+      PerformanceCycle.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      PerformanceCycle.countDocuments(filter),
+    ]);
+
+    return ApiResponse.success(res, 'Performance cycles retrieved successfully', {
+      cycles,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.closeCycle = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.cycleId)) {
+      return ApiResponse.error(res, 'Performance cycle not found', null, 404);
+    }
+
+    const cycle = await PerformanceCycle.findOneAndUpdate(
+      { _id: req.params.cycleId, status: 'open' },
+      { $set: { status: 'closed' } },
+      { new: true, runValidators: true }
+    );
+    if (cycle) return ApiResponse.success(res, 'Performance cycle closed successfully', { cycle });
+
+    const existingCycle = await PerformanceCycle.findById(req.params.cycleId).lean();
+    if (!existingCycle) return ApiResponse.error(res, 'Performance cycle not found', null, 404);
+    return ApiResponse.error(res, 'Performance cycle is already closed', null, 409);
+  } catch (err) {
+    next(err);
+  }
 };
 
 exports.createCycle = async (req, res, next) => {
@@ -145,14 +260,14 @@ exports.listTeamReviews = async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
-    const teamMembers = await User.find({ manager: req.user._id, role: 'employee' })
+    const teamMembers = await User.find({ manager: req.user._id })
       .select('_id')
       .lean();
     const employeeIds = teamMembers.map((member) => member._id);
     const filter = { employee: { $in: employeeIds } };
     const [reviews, total] = await Promise.all([
       Review.find(filter)
-        .sort({ updatedAt: -1 })
+        .sort({ updatedAt: -1, _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .populate('employee', 'name email employeeId')
@@ -214,8 +329,8 @@ exports.submitManagerReview = async (req, res, next) => {
       return ApiResponse.error(res, 'Only the assigned manager or HR can submit a manager review', null, 403);
     }
 
-    if (review.cycle && review.cycle.status === 'closed') {
-      return ApiResponse.error(res, 'Cannot submit manager review for a closed performance cycle', null, 400);
+    if (!review.cycle || review.cycle.status !== 'open') {
+      return ApiResponse.error(res, 'Cannot submit manager review without an open performance cycle', null, 400);
     }
 
     const managerReview = typeof req.body.managerReview === 'string' ? req.body.managerReview.trim() : '';
@@ -226,21 +341,24 @@ exports.submitManagerReview = async (req, res, next) => {
       return ApiResponse.error(res, 'managerReview cannot exceed 5000 characters', null, 400);
     }
 
-    const rating = req.body.rating !== undefined ? req.body.rating : req.body.managerRating;
+    if (req.body.rating !== undefined) {
+      return ApiResponse.error(res, 'rating is not accepted for manager reviews; use managerRating', null, 400);
+    }
+
+    const rating = req.body.managerRating;
     if (rating !== undefined) {
       if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-        return ApiResponse.error(res, 'rating must be a whole number from 1 to 5', null, 400);
+        return ApiResponse.error(res, 'managerRating must be a whole number from 1 to 5', null, 400);
       }
       review.managerRating = rating;
-      review.rating = rating;
     }
 
     if (req.body.goals !== undefined) {
-      const goals = normalizeGoals(req.body.goals);
+      const goals = applyManagerGoalUpdates(review.goals, req.body.goals);
       if (!goals) {
         return ApiResponse.error(
           res,
-          'goals must contain up to 20 valid goals, each with valid KPI targets and optional actuals',
+          'goals must reference existing goals and KPIs and contain valid status or actual updates',
           null,
           400
         );
@@ -252,6 +370,70 @@ exports.submitManagerReview = async (req, res, next) => {
     await review.save();
 
     return ApiResponse.success(res, 'Manager review submitted successfully', { review });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getMyReviews = async (req, res, next) => {
+  try {
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
+    const filter = { employee: req.user._id };
+    if (req.query.cycle !== undefined) {
+      if (!mongoose.isValidObjectId(req.query.cycle)) {
+        return ApiResponse.error(res, 'cycle must be a valid performance cycle ID', null, 400);
+      }
+      filter.cycle = req.query.cycle;
+    }
+
+    const [reviews, total] = await Promise.all([
+      Review.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('cycle', 'period status startDate endDate')
+        .lean(),
+      Review.countDocuments(filter),
+    ]);
+
+    return ApiResponse.success(res, 'My performance reviews retrieved successfully', {
+      reviews,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.listCycleReviews = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.cycleId)) {
+      return ApiResponse.error(res, 'Performance cycle not found', null, 404);
+    }
+    const cycle = await PerformanceCycle.findById(req.params.cycleId).lean();
+    if (!cycle) return ApiResponse.error(res, 'Performance cycle not found', null, 404);
+
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
+    const filter = { cycle: cycle._id };
+
+    const [reviews, total] = await Promise.all([
+      Review.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('employee', 'name email employeeId department designation')
+        .populate('cycle', 'period status')
+        .lean(),
+      Review.countDocuments(filter),
+    ]);
+
+    return ApiResponse.success(res, 'Cycle reviews retrieved successfully', {
+      cycle,
+      reviews,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     next(err);
   }

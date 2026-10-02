@@ -9,9 +9,13 @@
     { "key": "testAdminEmail", "value": "admin@peoplepulse.com" },
     { "key": "testAdminPassword", "value": "replace-with-test-admin-password" },
     { "key": "testEmployeeEmail", "value": "employee@example.com" },
+    { "key": "testManagerEmail", "value": "manager@example.com" },
+    { "key": "testOutsiderEmail", "value": "outsider@example.com" },
     { "key": "testUserPassword", "value": "replace-with-test-user-password" },
+    { "key": "adminToken", "value": "" },
     { "key": "managerToken", "value": "" },
     { "key": "employeeToken", "value": "" },
+    { "key": "outsiderToken", "value": "" },
     { "key": "performanceCycleId", "value": "" },
     { "key": "performanceReviewId", "value": "" }
   ],
@@ -24,7 +28,7 @@
           "script": {
             "exec": [
               "pm.test('admin login succeeds', function () { pm.response.to.have.status(200); });",
-              "if (pm.response.code === 200) pm.collectionVariables.set('managerToken', pm.response.json().data.token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set('adminToken', pm.response.json().data.token);"
             ]
           }
         }
@@ -35,6 +39,52 @@
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{testAdminEmail}}\",\n  \"password\": \"{{testAdminPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Login Assigned Manager",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('assigned manager login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('managerToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testManagerEmail}}\",\n  \"password\": \"{{testUserPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Login Outsider",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('outsider login succeeds', function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) pm.collectionVariables.set('outsiderToken', pm.response.json().data.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testOutsiderEmail}}\",\n  \"password\": \"{{testUserPassword}}\"\n}"
         },
         "url": "{{baseUrl}}/auth/login"
       }
@@ -78,7 +128,7 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Authorization", "value": "Bearer {{managerToken}}" },
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
           { "key": "Content-Type", "value": "application/json" }
         ],
         "body": {
@@ -86,6 +136,54 @@
           "raw": "{\n  \"period\": \"Performance Test {{$guid}}\",\n  \"status\": \"open\"\n}"
         },
         "url": "{{baseUrl}}/performance/cycles"
+      }
+    },
+    {
+      "name": "Employee Cannot Create Performance Cycle",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee cannot create a performance cycle', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"period\": \"Unauthorized Performance Test\",\n  \"status\": \"open\"\n}"
+        },
+        "url": "{{baseUrl}}/performance/cycles"
+      }
+    },
+    {
+      "name": "List Open Performance Cycles",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee can list open cycles', function () { pm.response.to.have.status(200); });",
+              "const cycles = pm.response.json().data.cycles;",
+              "const cycleId = pm.collectionVariables.get('performanceCycleId');",
+              "pm.test('new cycle is included', function () {",
+              "  pm.expect(cycles.some(function (cycle) { return cycle._id === cycleId; })).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+        "url": "{{baseUrl}}/performance/cycles?status=open&page=1&limit=20"
       }
     },
     {
@@ -117,22 +215,264 @@
         },
         "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
       }
-    }
-  ,
+    },
+    {
+      "name": "Reject Duplicate Self-Review (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('duplicate self-review returns 409 conflict', function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"selfReview\": \"Attempting to submit second review.\",\n  \"rating\": 5\n}"
+        },
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
+      }
+    },
+    {
+      "name": "Reject Invalid Self-Rating (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('invalid rating out of range returns 400', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"selfReview\": \"Invalid rating score.\",\n  \"rating\": 6\n}"
+        },
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
+      }
+    },
+    {
+      "name": "List My Performance Reviews",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee can list their own reviews', function () { pm.response.to.have.status(200); });",
+              "const reviews = pm.response.json().data.reviews;",
+              "const reviewId = pm.collectionVariables.get('performanceReviewId');",
+              "pm.test('submitted review appears in employee my list', function () {",
+              "  pm.expect(reviews.some(function (review) { return review._id === reviewId; })).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+        "url": "{{baseUrl}}/performance/reviews/my?page=1&limit=20"
+      }
+    },
     {
       "name": "List Manager Team Reviews",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('team reviews are returned', function () { pm.response.to.have.status(200); });",
+              "const reviews = pm.response.json().data.reviews;",
+              "const reviewId = pm.collectionVariables.get('performanceReviewId');",
+              "pm.test('assigned employee review appears in manager team list', function () {",
+              "  pm.expect(reviews.some(function (review) { return review._id === reviewId; })).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
-        "url": "{{baseUrl}}/performance/team/reviews?page=1&limit=20"
+        "url": "{{baseUrl}}/performance/team?page=1&limit=20"
+      }
+    },
+    {
+      "name": "Outsider Team Reviews Exclude Employee Review",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('outsider team request succeeds', function () { pm.response.to.have.status(200); });",
+              "const reviews = pm.response.json().data.reviews;",
+              "const reviewId = pm.collectionVariables.get('performanceReviewId');",
+              "pm.test('unassigned employee review is excluded', function () {",
+              "  pm.expect(reviews.some(function (review) { return review._id === reviewId; })).to.be.false;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{outsiderToken}}" }],
+        "url": "{{baseUrl}}/performance/team?page=1&limit=20"
       }
     },
     {
       "name": "Get Review (Manager/HR/Owner Only)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('assigned manager can read the review', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
         "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}"
+      }
+    },
+    {
+      "name": "Get Review as Employee Owner",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee can read their own review', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+        "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}"
+      }
+    },
+    {
+      "name": "Get Review as HR / Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HR/admin can read the review', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}"
+      }
+    },
+    {
+      "name": "Outsider Cannot Read Review",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('outsider cannot read another employee review', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{outsiderToken}}" }],
+        "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}"
+      }
+    },
+    {
+      "name": "Outsider Cannot Submit Manager Review",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('outsider cannot submit manager review', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{outsiderToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"managerReview\": \"Unauthorized review attempt.\",\n  \"managerRating\": 2\n}"
+        },
+        "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}/manager-review"
+      }
+    },
+    {
+      "name": "Reject Invalid Goals (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('invalid KPI values return 400', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"selfReview\": \"Invalid KPI payload\",\n  \"rating\": 4,\n  \"goals\": [{\n    \"title\": \"Invalid Goal\",\n    \"kpis\": [{ \"name\": \"Test KPI\", \"target\": \"not-a-number\" }]\n  }]\n}"
+        },
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
+      }
+    },
+    {
+      "name": "Reject Employee Access to Cycle Reviews (403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('employee cannot list all cycle reviews', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/reviews"
       }
     },
     {
@@ -146,6 +486,8 @@
               "if (pm.response.code === 200) {",
               "  const review = pm.response.json().data.review;",
               "  pm.expect(review.managerReview).to.not.be.empty;",
+              "  pm.expect(review.managerRating).to.eql(5);",
+              "  pm.expect(review.rating).to.eql(4);",
               "}"
             ]
           }
@@ -159,9 +501,28 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"managerReview\": \"Great performance and project execution.\",\n  \"rating\": 5\n}"
+          "raw": "{\n  \"managerReview\": \"Great performance and project execution.\",\n  \"managerRating\": 5,\n  \"goals\": [{\n    \"title\": \"Improve response time\",\n    \"status\": \"completed\",\n    \"kpis\": [{ \"name\": \"Average response time\", \"actual\": 4 }]\n  }]\n}"
         },
         "url": "{{baseUrl}}/performance/reviews/{{performanceReviewId}}/manager-review"
+      }
+    },
+    {
+      "name": "Close Performance Cycle",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HR/admin can close the cycle', function () { pm.response.to.have.status(200); });",
+              "pm.expect(pm.response.json().data.cycle.status).to.eql('closed');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/performance/cycles/{{performanceCycleId}}/close"
       }
     }
   ]
