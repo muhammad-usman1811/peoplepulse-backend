@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Payslip = require('../models/Payslip');
 const AuditLog = require('../models/AuditLog');
 const ApiResponse = require('../utils/apiResponse');
+const notify = require('../utils/notify');
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -66,33 +67,33 @@ exports.generatePayslips = async (req, res, next) => {
       }, 400);
     }
 
+    const existingPayslips = await Payslip.find({ month }).select('employee');
+    const existingEmployeeIds = new Set(existingPayslips.map((payslip) => String(payslip.employee)));
+    const newPayslipValues = [];
     for (const employee of employees) {
-      if (await Payslip.exists({ employee: employee._id, month })) {
-        return ApiResponse.error(res, `A payslip already exists for ${month}`, null, 409);
-      }
-    }
-
-    const payslips = [];
-    for (const employee of employees) {
+      if (existingEmployeeIds.has(String(employee._id))) continue;
       const amounts = calculatePayslip(employee.monthlySalary, employee.salaryStructure);
-      const payslip = await Payslip.create({
+      newPayslipValues.push({
         employee: employee._id,
         month,
         salaryStructure: { id: employee.salaryStructure._id, grade: employee.salaryStructure.grade },
         monthlySalary: employee.monthlySalary,
         ...amounts,
       });
+    }
+
+    const payslips = newPayslipValues.length ? await Payslip.insertMany(newPayslipValues) : [];
+    for (const payslip of payslips) {
       await AuditLog.record({
         ...actorFrom(req),
         action: 'CREATE',
         resource: 'Payslip',
         resourceId: payslip._id,
-        meta: { employee: employee._id, month, grossPay: payslip.grossPay, netPay: payslip.netPay },
+        meta: { employee: payslip.employee, month, grossPay: payslip.grossPay, netPay: payslip.netPay },
       });
-      payslips.push(payslip);
     }
 
-    return ApiResponse.success(res, 'Payslips generated successfully.', { payslips, count: payslips.length }, 201);
+    return ApiResponse.success(res, 'Payslips generated successfully.', { payslips, count: payslips.length }, payslips.length ? 201 : 200);
   } catch (err) {
     if (err.code === 11000) return ApiResponse.error(res, 'A payslip already exists for this employee and month', null, 409);
     next(err);
@@ -128,6 +129,16 @@ const decidePayslip = (decision) => async (req, res, next) => {
       resourceId: payslip._id,
       meta: { month: payslip.month, employee: payslip.employee, status: payslip.status, note: payslip.decisionNote },
     });
+    try {
+      if (decision === 'approve') {
+        await notify(payslip.employee, 'payslip_approved', 'Payslip approved', `Your payslip for ${payslip.month} has been approved.`);
+      } else {
+        const note = payslip.decisionNote ? ` Note: ${payslip.decisionNote}` : '';
+        await notify(payslip.employee, 'payslip_sent_back', 'Payslip sent back', `Your payslip for ${payslip.month} was sent back for correction.${note}`);
+      }
+    } catch (notificationError) {
+      console.error('Failed to notify employee about payslip decision:', notificationError);
+    }
     return ApiResponse.success(res, decision === 'approve' ? 'Payslip approved.' : 'Payslip sent back.', { payslip });
   } catch (err) {
     if (err.name === 'CastError') return ApiResponse.error(res, 'Invalid payslip ID.', null, 400);
@@ -137,6 +148,54 @@ const decidePayslip = (decision) => async (req, res, next) => {
 
 exports.approvePayslip = decidePayslip('approve');
 exports.sendBackPayslip = decidePayslip('send_back');
+
+exports.listPayslips = async (req, res, next) => {
+  try {
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
+    const filter = req.user.role === 'employee' ? { employee: req.user._id } : {};
+
+    if (req.query.month !== undefined) {
+      if (!validMonth(req.query.month)) return ApiResponse.error(res, 'month must use YYYY-MM format', null, 400);
+      filter.month = req.query.month;
+    }
+    if (req.query.status !== undefined) {
+      if (!['pending', 'approved', 'sent_back'].includes(req.query.status)) {
+        return ApiResponse.error(res, 'Invalid payslip status', null, 400);
+      }
+      filter.status = req.query.status;
+    }
+
+    const [payslips, total] = await Promise.all([
+      Payslip.find(filter)
+        .sort({ month: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('employee', 'name email'),
+      Payslip.countDocuments(filter),
+    ]);
+
+    return ApiResponse.success(res, 'Payslips retrieved successfully.', {
+      payslips,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getPayslip = async (req, res, next) => {
+  try {
+    const filter = { _id: req.params.id };
+    if (req.user.role === 'employee') filter.employee = req.user._id;
+    const payslip = await Payslip.findOne(filter);
+    if (!payslip) return ApiResponse.error(res, 'Payslip not found.', null, 404);
+    return ApiResponse.success(res, 'Payslip retrieved successfully.', { payslip });
+  } catch (err) {
+    if (err.name === 'CastError') return ApiResponse.error(res, 'Invalid payslip ID.', null, 400);
+    next(err);
+  }
+};
 
 // ---------------------------------------------------------------------------
 // GET /api/payroll/salary-structure

@@ -20,6 +20,7 @@ const performanceRoutes = require('./routes/performanceRoutes');
 const auditLogRoutes = require('./routes/auditLogRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
 const recruitmentRoutes = require('./routes/recruitmentRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
@@ -168,6 +169,7 @@ app.use('/api/wfh-requests', wfhRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/recruitment', recruitmentRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/audit-log', auditLogRoutes);
 
 // 404 Route Not Found Handler
