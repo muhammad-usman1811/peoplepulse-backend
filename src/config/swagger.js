@@ -211,6 +211,50 @@ const swaggerDocument = {
         },
       },
     },
+    '/notifications': {
+      get: {
+        summary: 'List Notifications',
+        description: 'Returns notifications for the authenticated user, newest first. Use unread=true to return only unread items.',
+        tags: ['Notifications'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+          { in: 'query', name: 'unread', schema: { type: 'string', enum: ['true', 'false'] } },
+        ],
+        responses: {
+          200: { description: 'Notifications retrieved successfully' },
+          400: { description: 'Invalid unread filter' },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
+    '/notifications/read-all': {
+      patch: {
+        summary: 'Mark All Notifications Read',
+        description: 'Marks all unread notifications belonging to the authenticated user as read.',
+        tags: ['Notifications'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Notifications marked as read' },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
+    '/notifications/{id}/read': {
+      patch: {
+        summary: 'Mark Notification Read',
+        description: 'Marks an owned notification as read. Notifications belonging to another user are not disclosed.',
+        tags: ['Notifications'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Notification marked as read' },
+          401: { description: 'Authentication required' },
+          404: { description: 'Notification not found' },
+        },
+      },
+    },
     '/org/departments': {
       get: {
         summary: 'List Departments',
@@ -797,6 +841,18 @@ const swaggerDocument = {
       },
     },
     '/performance/cycles': {
+      get: {
+        summary: 'List Performance Review Cycles',
+        description: 'Available to any authenticated user so employees can select an open cycle.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['open', 'closed'] } },
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+        ],
+        responses: { 200: { description: 'Performance cycles with pagination metadata' }, 400: { description: 'Invalid status filter' }, 401: { description: 'Authentication required' } },
+      },
       post: {
         summary: 'Create a Performance Review Cycle',
         tags: ['Performance'],
@@ -821,7 +877,40 @@ const swaggerDocument = {
         responses: { 201: { description: 'Performance cycle created' }, 403: { description: 'HR/Admin role required' }, 409: { description: 'Period already exists' } },
       },
     },
+    '/performance/cycles/{cycleId}/close': {
+      patch: {
+        summary: 'Close a Performance Review Cycle',
+        description: 'HR/admin roles can close an open cycle. Closing prevents further self- and manager-review submissions.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'cycleId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Performance cycle closed' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Performance cycle not found' },
+          409: { description: 'Performance cycle is already closed' },
+        },
+      },
+    },
     '/performance/cycles/{cycleId}/reviews': {
+      get: {
+        summary: 'List Reviews for a Performance Cycle',
+        description: 'Returns all reviews submitted for a specific cycle. Restricted to superadmin, admin, and HR.',
+        tags: ['Performance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'cycleId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+        ],
+        responses: {
+          200: { description: 'Cycle reviews retrieved successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Only superadmin, admin, or HR can view cycle reviews' },
+          404: { description: 'Performance cycle not found' },
+        },
+      },
       post: {
         summary: 'Submit Employee Self-Review',
         tags: ['Performance'],
@@ -873,9 +962,10 @@ const swaggerDocument = {
         responses: { 201: { description: 'Self-review submitted' }, 400: { description: 'Invalid review or rating' }, 404: { description: 'Open cycle not found' }, 409: { description: 'Review already submitted' } },
       },
     },
-    '/performance/team/reviews': {
+    '/performance/team': {
       get: {
         summary: 'List Reviews for the Authenticated Manager Direct Reports',
+        description: 'Uses the assigned manager relationship regardless of the direct report user role.',
         tags: ['Performance'],
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -888,18 +978,19 @@ const swaggerDocument = {
         },
       },
     },
-    '/performance/team': {
+    '/performance/reviews/my': {
       get: {
-        summary: 'List Reviews for the Authenticated Manager Direct Reports (Compatibility Route)',
-        description: 'Compatibility alias for GET /performance/team/reviews - same handler, same response shape.',
+        summary: 'List Performance Reviews for the Authenticated Employee',
+        description: 'Returns the list of performance reviews submitted by the logged-in user.',
         tags: ['Performance'],
         security: [{ BearerAuth: [] }],
         parameters: [
           { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+          { name: 'cycle', in: 'query', schema: { type: 'string' }, description: 'Optional cycle ID filter' },
         ],
         responses: {
-          200: { description: 'Reviews for direct reports, with pagination metadata' },
+          200: { description: 'My reviews retrieved successfully' },
           401: { description: 'Authentication required' },
         },
       },
@@ -918,25 +1009,6 @@ const swaggerDocument = {
           404: { description: 'Review not found' },
         },
       },
-      put: {
-        summary: 'Submit or Update Manager Review (Compatibility Route)',
-        description: 'Compatibility alias for PUT /performance/reviews/{reviewId}/manager-review. Restricted to the assigned manager or HR/admin roles.',
-        tags: ['Performance'],
-        security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'reviewId', in: 'path', required: true, schema: { type: 'string' } }],
-        requestBody: {
-          required: true,
-          content: { 'application/json': { schema: {
-            type: 'object', required: ['managerReview'], properties: {
-              managerReview: { type: 'string', maxLength: 5000 },
-              rating: { type: 'integer', minimum: 1, maximum: 5 },
-              managerRating: { type: 'integer', minimum: 1, maximum: 5 },
-              goals: { type: 'array', maxItems: 20, items: { type: 'object' } },
-            },
-          } } },
-        },
-        responses: { 200: { description: 'Manager review submitted successfully' }, 400: { description: 'Invalid review payload or closed cycle' }, 401: { description: 'Authentication required' }, 403: { description: 'Only assigned manager or HR can submit manager review' }, 404: { description: 'Review not found' } },
-      },
     },
     '/performance/reviews/{reviewId}/manager-review': {
       put: {
@@ -954,30 +1026,29 @@ const swaggerDocument = {
                 required: ['managerReview'],
                 properties: {
                   managerReview: { type: 'string', maxLength: 5000, example: 'Excellent performance and project leadership.' },
-                  rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
-                  managerRating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                  managerRating: {
+                    type: 'integer', minimum: 1, maximum: 5, example: 5,
+                    description: 'Manager score; the employee self-rating is unchanged.',
+                  },
                   goals: {
                     type: 'array',
                     maxItems: 20,
+                    description: 'Progress updates to existing employee goals only. Goal definitions and KPI targets are preserved.',
                     items: {
                       type: 'object',
                       required: ['title'],
                       properties: {
                         title: { type: 'string', maxLength: 200 },
-                        description: { type: 'string', maxLength: 1000 },
                         status: { type: 'string', enum: ['not_started', 'in_progress', 'completed'] },
                         kpis: {
                           type: 'array',
                           maxItems: 20,
                           items: {
                             type: 'object',
-                            required: ['name', 'target'],
+                            required: ['name'],
                             properties: {
                               name: { type: 'string', maxLength: 120 },
-                              target: { type: 'number' },
-                              actual: { type: 'number', nullable: true },
-                              unit: { type: 'string', maxLength: 40 },
-                              weight: { type: 'number', minimum: 0, maximum: 100 },
+                              actual: { type: 'number', nullable: true, description: 'Only the actual value may be changed by the manager.' },
                             },
                           },
                         },
@@ -997,24 +1068,96 @@ const swaggerDocument = {
           404: { description: 'Review not found' },
         },
       },
+    },
+    '/recruitment/job-postings': {
       post: {
-        summary: 'Submit or Update Manager Review (Compatibility Route)',
-        description: 'Compatibility alias for PUT /performance/reviews/{reviewId}/manager-review. Restricted to the assigned manager or HR/admin roles.',
-        tags: ['Performance'],
+        summary: 'Create a Recruitment Job Posting',
+        description: 'HR, admin, or superadmin users can create a posting. Title and department are required.',
+        tags: ['Recruitment'],
         security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'reviewId', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: {
-            type: 'object', required: ['managerReview'], properties: {
-              managerReview: { type: 'string', maxLength: 5000 },
-              rating: { type: 'integer', minimum: 1, maximum: 5 },
-              managerRating: { type: 'integer', minimum: 1, maximum: 5 },
-              goals: { type: 'array', maxItems: 20, items: { type: 'object' } },
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['title', 'department'],
+                properties: {
+                  title: { type: 'string', minLength: 1, maxLength: 150, example: 'Backend Engineer' },
+                  department: { type: 'string', minLength: 1, maxLength: 120, example: 'Engineering' },
+                },
+              },
             },
-          } } },
+          },
         },
-        responses: { 200: { description: 'Manager review submitted successfully' }, 400: { description: 'Invalid review payload or closed cycle' }, 401: { description: 'Authentication required' }, 403: { description: 'Only assigned manager or HR can submit manager review' }, 404: { description: 'Review not found' } },
+        responses: {
+          201: { description: 'Job posting created' },
+          400: { description: 'Title or department missing/invalid' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
+        },
+      },
+    },
+    '/recruitment/candidates': {
+      post: {
+        summary: 'Add a Candidate to a Job Posting',
+        description: 'New candidates start in the Applied stage.',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'email', 'jobPosting'],
+                properties: {
+                  name: { type: 'string', minLength: 1, maxLength: 120, example: 'Alex Candidate' },
+                  email: { type: 'string', format: 'email', maxLength: 254, example: 'alex@example.com' },
+                  jobPosting: { type: 'string', description: 'ID returned by POST /recruitment/job-postings' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Candidate added in Applied stage' },
+          400: { description: 'Candidate details invalid' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
+          404: { description: 'Job posting not found' },
+          409: { description: 'Candidate already applied to this posting' },
+        },
+      },
+    },
+    '/recruitment/candidates/{candidateId}/stage': {
+      patch: {
+        summary: 'Move a Candidate to a Pipeline Stage',
+        description: 'Sets the candidate stage to one of the supported recruitment stages.',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'candidateId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['stage'],
+                properties: {
+                  stage: { type: 'string', enum: ['Applied', 'Screening', 'Interview', 'Offer', 'Hired'] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Candidate stage updated' },
+          400: { description: 'Stage is not supported' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
+          404: { description: 'Candidate not found' },
+        },
       },
     },
     '/auth/forgot-password': {
@@ -1162,7 +1305,7 @@ const swaggerDocument = {
     '/payroll/generate': {
       post: {
         summary: 'Generate Monthly Payslips',
-        description: 'Creates one pending payslip for every active employee. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per payslip.',
+        description: 'Creates pending payslips for active employees who do not already have one for the month. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
         tags: ['Payroll'],
         security: [{ BearerAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
@@ -1170,10 +1313,11 @@ const swaggerDocument = {
         } } } },
         responses: {
           201: { description: 'Payslips generated successfully' },
+          200: { description: 'No new payslips were needed' },
           400: { description: 'Invalid month or an active employee lacks pay assignment' },
           401: { description: 'Authentication required' },
           403: { description: 'HR, admin, or superadmin role required' },
-          409: { description: 'A payslip already exists for the employee and month' },
+          409: { description: 'Concurrent generation created a duplicate payslip' },
         },
       },
     },
@@ -1184,6 +1328,31 @@ const swaggerDocument = {
         tags: ['Payroll'], security: [{ BearerAuth: [] }],
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: { 200: { description: 'Payslip approved' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance role required' }, 404: { description: 'Payslip not found' }, 409: { description: 'Payslip is no longer pending' } },
+      },
+    },
+    '/payroll/payslips': {
+      get: {
+        summary: 'List Payslips',
+        description: 'Finance, HR, admin, and superadmin can view all payslips. Employees can view only their own. Supports optional month and status filters and pagination.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+          { in: 'query', name: 'month', schema: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' } },
+          { in: 'query', name: 'status', schema: { type: 'string', enum: ['pending', 'approved', 'sent_back'] } },
+        ],
+        responses: { 200: { description: 'Payslips retrieved successfully' }, 400: { description: 'Invalid month or status' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance, HR, admin, superadmin, or employee role required' } },
+      },
+    },
+    '/payroll/payslips/{id}': {
+      get: {
+        summary: 'Get Payslip',
+        description: 'Finance, HR, admin, and superadmin can view any payslip. Employees can view only their own.',
+        tags: ['Payroll'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Payslip retrieved successfully' }, 400: { description: 'Invalid payslip ID' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance, HR, admin, superadmin, or employee role required' }, 404: { description: 'Payslip not found' } },
       },
     },
     '/payroll/payslips/{id}/send-back': {

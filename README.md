@@ -172,11 +172,23 @@ Employee `User.location` is currently stored as a canonical `Location.name` stri
 - **PATCH** `/leave-requests/:id/approve`, `/leave-requests/:id/reject` (and the `/wfh-requests` equivalents) for the assigned manager to decide.
 
 ### Performance Reviews
+- **GET** `/performance/cycles?status=open&page=1&limit=20` to list cycles for any authenticated user; employees can use this to select an open cycle.
 - **POST** `/performance/cycles` to create a review period (superadmin, admin, or HR); optional `startDate` and `endDate` must both be valid `YYYY-MM-DD` dates, with start on/before end.
+- **PATCH** `/performance/cycles/:cycleId/close` to close an open cycle (superadmin, admin, or HR); repeat close attempts return `409`.
+- **GET** `/performance/cycles/:cycleId/reviews` to list all reviews in a cycle (superadmin, admin, or HR).
 - **POST** `/performance/cycles/:cycleId/reviews` to submit an employee self-review with a rating from 1 to 5 and optional `goals` containing numeric KPI targets/actuals.
-- **GET** `/performance/team/reviews?page=1&limit=20` to list reviews for the authenticated manager's direct reports.
+- **GET** `/performance/reviews/my` to list reviews submitted by the authenticated employee.
+- **GET** `/performance/team?page=1&limit=20` to list reviews for the authenticated manager's direct reports.
 - **GET** `/performance/reviews/:reviewId` is limited to the reviewed employee, their current manager, or HR/admin roles; other authenticated users receive `403`.
-- Import `PeoplePulse_Performance_API.postman_collection.json` for the focused Postman flow.
+- **PUT** `/performance/reviews/:reviewId/manager-review` accepts `managerRating` (not `rating`). Managers can update existing goal status and KPI actuals, but cannot replace employee-authored goal definitions or targets.
+- Performance JSON requests support up to 256 KB for the bounded goals/KPI payload; the other API routes retain the 10 KB JSON limit.
+- Import `PeoplePulse_Performance_API.postman_collection.json` for the role-based Postman flow. Configure the admin, assigned manager, employee, and unrelated outsider emails; use the test password for the three test accounts. The assigned manager account must have role `employee`, and the reviewed employee's `manager` field must reference that manager's user ID. The outsider must not be assigned to that employee. Run the collection in order to verify allowed access for employee/manager/HR and `403` responses for an outsider.
+
+### Recruitment
+- **POST** `/recruitment/job-postings` (HR/admin) with required `title` and `department`.
+- **POST** `/recruitment/candidates` (HR/admin) with `name`, `email`, and the job posting ID; a new candidate starts at `Applied`.
+- **PATCH** `/recruitment/candidates/:candidateId/stage` (HR/admin) with one of `Applied`, `Screening`, `Interview`, `Offer`, or `Hired`.
+- Import `PeoplePulse_Recruitment_API.postman_collection.json` and configure the HR/admin login variables. Run the requests in order to create a posting, add a candidate, validate missing posting fields, and move the candidate through every stage.
 
 ### Attendance
 - **POST** `/attendance/clock-in`

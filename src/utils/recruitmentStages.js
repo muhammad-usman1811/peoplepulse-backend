@@ -1,0 +1,1 @@
+module.exports = Object.freeze(['Applied', 'Screening', 'Interview', 'Offer', 'Hired']);
