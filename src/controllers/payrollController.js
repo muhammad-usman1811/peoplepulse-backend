@@ -69,6 +69,9 @@ exports.generatePayslips = async (req, res, next) => {
 
     const existingPayslips = await Payslip.find({ month }).select('employee');
     const existingEmployeeIds = new Set(existingPayslips.map((payslip) => String(payslip.employee)));
+    const skippedEmployees = employees
+      .filter((employee) => existingEmployeeIds.has(String(employee._id)))
+      .map((employee) => employee._id);
     const newPayslipValues = [];
     for (const employee of employees) {
       if (existingEmployeeIds.has(String(employee._id))) continue;
@@ -93,7 +96,12 @@ exports.generatePayslips = async (req, res, next) => {
       });
     }
 
-    return ApiResponse.success(res, 'Payslips generated successfully.', { payslips, count: payslips.length }, payslips.length ? 201 : 200);
+    return ApiResponse.success(res, 'Payslips generated successfully.', {
+      payslips,
+      count: payslips.length,
+      skippedCount: skippedEmployees.length,
+      skippedEmployees,
+    }, payslips.length ? 201 : 200);
   } catch (err) {
     if (err.code === 11000) return ApiResponse.error(res, 'A payslip already exists for this employee and month', null, 409);
     next(err);
@@ -137,7 +145,11 @@ const decidePayslip = (decision) => async (req, res, next) => {
         await notify(payslip.employee, 'payslip_sent_back', 'Payslip sent back', `Your payslip for ${payslip.month} was sent back for correction.${note}`);
       }
     } catch (notificationError) {
-      console.error('Failed to notify employee about payslip decision:', notificationError);
+      console.error('Failed to notify employee about payslip decision:', {
+        userId: String(payslip.employee),
+        type: decision === 'approve' ? 'payslip_approved' : 'payslip_sent_back',
+        error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+      });
     }
     return ApiResponse.success(res, decision === 'approve' ? 'Payslip approved.' : 'Payslip sent back.', { payslip });
   } catch (err) {

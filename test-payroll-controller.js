@@ -130,12 +130,12 @@ test('finance approval records an approval audit entry', async () => {
 
 test('payslip approval succeeds when notification delivery fails', async () => {
   const payslip = { _id: ids.payslip, employee: ids.employee, month: '2026-09', status: 'pending' };
-  let logged = false;
+  let logArgs;
   Payslip.findById = async () => payslip;
   Payslip.findOneAndUpdate = async (_filter, update) => Object.assign(payslip, update.$set);
   AuditLog.record = async () => {};
   Notification.create = async () => { throw new Error('notification database unavailable'); };
-  console.error = () => { logged = true; };
+  console.error = (...args) => { logArgs = args; };
 
   const res = await runController(controller.approvePayslip, {
     params: { id: String(ids.payslip) },
@@ -146,7 +146,9 @@ test('payslip approval succeeds when notification delivery fails', async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(payslip.status, 'approved');
-  assert.equal(logged, true);
+  assert.equal(logArgs[1].userId, String(ids.employee));
+  assert.equal(logArgs[1].type, 'payslip_approved');
+  assert.equal(logArgs[1].error, 'notification database unavailable');
 });
 
 test('sending a payslip back notifies the employee with the decision note', async () => {
@@ -281,8 +283,39 @@ test('generation inserts only missing employees after one month lookup', async (
 
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.data.count, 1);
+  assert.equal(res.body.data.skippedCount, 1);
+  assert.deepEqual(res.body.data.skippedEmployees, [ids.employee]);
   assert.equal(lookupCount, 1);
   assert.equal(insertCount, 1);
+});
+
+test('repeated generation reports employees whose payslips already exist', async () => {
+  const employee = {
+    _id: ids.employee,
+    monthlySalary: 100000,
+    salaryStructure: {
+      _id: ids.structure,
+      grade: 'G7',
+      basicPercentage: 60,
+      allowances: [],
+    },
+  };
+  let insertCount = 0;
+  User.find = () => ({ populate: async () => [employee] });
+  Payslip.find = () => ({ select: async () => [{ employee: ids.employee }] });
+  Payslip.insertMany = async () => { insertCount += 1; return []; };
+
+  const res = await runController(controller.generatePayslips, {
+    body: { month: '2026-09' },
+    user: { _id: ids.actor, name: 'Payroll HR', role: 'hr' },
+    headers: {},
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.count, 0);
+  assert.equal(res.body.data.skippedCount, 1);
+  assert.deepEqual(res.body.data.skippedEmployees, [ids.employee]);
+  assert.equal(insertCount, 0);
 });
 
 test('employee payslip list and detail are scoped to the authenticated employee', async () => {

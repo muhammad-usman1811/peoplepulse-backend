@@ -170,6 +170,7 @@ Employee `User.location` is currently stored as a canonical `Location.name` stri
 - **POST** `/leave-requests`, **POST** `/wfh-requests` to submit a request (employees only, need an assigned manager).
 - **GET** `/leave-requests/my`, **GET** `/wfh-requests/my` to list your own requests.
 - **PATCH** `/leave-requests/:id/approve`, `/leave-requests/:id/reject` (and the `/wfh-requests` equivalents) for the assigned manager to decide.
+- Approval and rejection notify the employee for both leave and WFH requests. Notification delivery is best effort; failures are recorded in structured server logs with `userId`, notification `type`, and error message, and do not undo the decision.
 
 ### Performance Reviews
 - **GET** `/performance/cycles?status=open&page=1&limit=20` to list cycles for any authenticated user; employees can use this to select an open cycle.
@@ -200,11 +201,17 @@ Employee `User.location` is currently stored as a canonical `Location.name` stri
 Attendance timestamps are stored in UTC. Calendar dates and the 9:00 AM late threshold use `APP_TIMEZONE` (default `Asia/Karachi`).
 
 ### Reports (Admin/HR)
-- **GET** `/reports/attendance-summary?from=YYYY-MM-DD&to=YYYY-MM-DD`: totals by attendance status and distinct employees; date bounds are optional.
-- **GET** `/reports/leave-summary?from=YYYY-MM-DD&to=YYYY-MM-DD`: totals by leave status and type; date bounds filter request start dates.
-- **GET** `/reports/payroll-summary`: salary-structure count, average basic percentage, and allowance totals by type.
+- **GET** `/reports/attendance-summary?from=YYYY-MM-DD&to=YYYY-MM-DD&groupBy=employee|department`: totals by attendance status and distinct employees. Optional `groupBy` adds `groups` keyed by employee ID or User department. If neither date is provided, the current UTC calendar month is used. The response returns the effective `from` and `to`.
+- **GET** `/reports/leave-summary?from=YYYY-MM-DD&to=YYYY-MM-DD`: totals by leave status and type. A request is included when it overlaps the range (`startDate <= to` and `endDate >= from`). If neither date is provided, the current UTC calendar month is used; the response returns the effective `from` and `to`.
+- **GET** `/reports/payroll-summary?month=YYYY-MM`: totals and status counts from generated payslips; `month` is optional.
+- **GET** `/reports/performance-summary?cycleId=<id>`: review counts, average self/manager ratings, and self-rating distribution; `cycleId` is optional. Reports require a superadmin, admin, or HR account.
 
-The payroll summary reflects configured salary structures. This API does not currently store payroll runs or employee payouts, so it does not report paid payroll amounts.
+Date bounds may be supplied independently. With only `from`, attendance is unbounded above and leave requests must end on/after that date; with only `to`, attendance is unbounded below and leave requests must start on/before that date.
+
+### Payslip Generation
+- **POST** `/payroll/generate` with `{ "month": "YYYY-MM" }` creates payslips for active employees with valid salary assignments.
+- Employees who already have a payslip for that month are skipped. The response includes `count`, `skippedCount`, and `skippedEmployees` (employee IDs); repeating a completed request returns `200` with zero newly created payslips when all employees were already processed.
+- Payslip approval and send-back notifications are best effort. Notification failures are recorded in structured server logs with `userId`, notification `type`, and error message, and do not fail the payroll decision.
 
 ### Payroll Salary Structures
 - **GET** `/payroll/salary-structure`, **GET** `/payroll/salary-structure/:id` (Admin/HR)
@@ -222,8 +229,19 @@ Example request:
 }
 ```
 
+### Documents
+- **POST** `/documents/upload` (`multipart/form-data`) with text field `category` and file field `file`.
+- **GET** `/documents/me` lists metadata for documents uploaded by the authenticated user; file contents are not included.
+- **GET** `/documents/employee/:employeeId` (superadmin, admin, or HR) lists metadata for an employee.
+- **DELETE** `/documents/:id` removes a document owned by the authenticated user; superadmin, admin, and HR may remove any employee document.
+- Uploads accept PDF, JPEG, and PNG files up to **5 MB**. The server validates the declared MIME type, extension, and file signature, then stores the file bytes in MongoDB. File contents are never returned by list or delete endpoints.
+
 ### Audit Log
-- **GET** `/audit-log`, **GET** `/audit-log/:id` (superadmin, admin only) — records employee, profile, organization, authentication, and payroll changes. Password values and profile field values are not stored in audit metadata.
+- **GET** `/audit-logs`, **GET** `/audit-logs/:id` (superadmin only) — paginated audit entries. Filter with `entityType`, `actor`, `from`, and `to` (inclusive UTC date bounds); `action` and `resourceId` are also supported. The legacy `/audit-log` route remains available. Password values and profile field values are not stored in audit metadata.
+
+### System Configuration
+- **GET** `/system-config` (authenticated users) returns configured key/value settings.
+- **PUT** `/system-config` (superadmin only) creates or updates one setting with JSON `{ "key": "leave.annualAllocation", "value": { "days": 20 } }`. Successful changes are recorded in the audit log as `SystemConfig` entries, including before/after values.
 
 ### Department Location Backfill
 Run `npm run backfill:department-locations` to preview legacy string values in `Department.location`. Resolve any unmatched or ambiguous values first, then apply mappings with `npm run backfill:department-locations -- --apply`.

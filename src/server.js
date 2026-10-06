@@ -21,6 +21,8 @@ const auditLogRoutes = require('./routes/auditLogRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
 const recruitmentRoutes = require('./routes/recruitmentRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const documentRoutes = require('./routes/documentRoutes');
+const systemConfigRoutes = require('./routes/systemConfigRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
@@ -170,7 +172,10 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/recruitment', recruitmentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/documents', documentRoutes);
 app.use('/api/audit-log', auditLogRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/system-config', systemConfigRoutes);
 
 // 404 Route Not Found Handler
 app.use((req, res) => {
