@@ -11,8 +11,9 @@
     "backfill:department-locations": "node src/scripts/backfillDepartmentLocations.js",
     "test:leave-wfh": "cross-env NODE_ENV=test node test-leave-wfh.js",
     "test": "npm run test:unit",
-    "test:unit": "node --test test-auth-security.js test-employee-validation.js test-performance-permissions.js test-recruitment-controller.js test-request-controller.js test-payroll-controller.js test-reports-controller.js test-notification-controller.js test-onboarding-controller.js test-document-controller.js",
+    "test:unit": "node --test test-auth-security.js test-employee-validation.js test-performance-permissions.js test-recruitment-controller.js test-request-controller.js test-payroll-controller.js test-reports-controller.js test-notification-controller.js test-onboarding-controller.js test-document-controller.js test-documents-config-audit-controller.js",
     "test:integration:notifications": "cross-env NODE_ENV=test node test-notification-reports.integration.js",
+    "test:integration:documents-audit-config": "cross-env NODE_ENV=test node --test test-documents-audit-config.integration.js",
     "test:request": "node --test test-request-controller.js",
     "test:api": "cross-env NODE_ENV=test node src/test_api.js",
     "test:auth-reset:api": "cross-env NODE_ENV=test node test-auth-reset-api.js",
@@ -53,6 +54,7 @@
     "luxon": "^3.7.2",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
+    "multer": "^2.4.0",
     "nodemailer": "^10.0.10",
     "swagger-ui-express": "^5.0.1",
     "validator": "^13.12.0"

@@ -785,6 +785,7 @@ const swaggerDocument = {
     '/leave-requests/{id}/approve': {
       patch: {
         summary: 'Approve Leave Request',
+        description: 'Approves the request, records an audit entry, and best-effort notifies the employee.',
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
@@ -794,6 +795,7 @@ const swaggerDocument = {
     '/leave-requests/{id}/reject': {
       patch: {
         summary: 'Reject Leave Request',
+        description: 'Rejects the request, records an audit entry, and best-effort notifies the employee.',
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
@@ -835,6 +837,7 @@ const swaggerDocument = {
     '/wfh-requests/{id}/approve': {
       patch: {
         summary: 'Approve WFH Request',
+        description: 'Approves the request, records an audit entry, and best-effort notifies the employee.',
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
@@ -844,6 +847,7 @@ const swaggerDocument = {
     '/wfh-requests/{id}/reject': {
       patch: {
         summary: 'Reject WFH Request',
+        description: 'Rejects the request, records an audit entry, and best-effort notifies the employee.',
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
@@ -1369,21 +1373,15 @@ const swaggerDocument = {
     '/payroll/generate': {
       post: {
         summary: 'Generate Monthly Payslips',
-        description: 'Creates pending payslips for active employees who do not already have one for the month. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
+        description: 'Creates pending payslips for active employees who do not already have one for the month. Employees with an existing payslip are skipped and listed in skippedEmployees. The response includes count, skippedCount, and skippedEmployees. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
         tags: ['Payroll'],
         security: [{ BearerAuth: [] }],
-        requestBody: {
-          required: true, content: {
-            'application/json': {
-              schema: {
-                type: 'object', required: ['month'], properties: { month: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$', example: '2026-09' } },
-              }
-            }
-          }
-        },
+        requestBody: { required: true, content: { 'application/json': { schema: {
+          type: 'object', required: ['month'], properties: { month: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$', example: '2026-09' } },
+        } } } },
         responses: {
           201: { description: 'Payslips generated successfully' },
-          200: { description: 'No new payslips were needed' },
+          200: { description: 'No new payslips were needed; count is 0 and skippedCount/skippedEmployees describe existing payslips' },
           400: { description: 'Invalid month or an active employee lacks pay assignment' },
           401: { description: 'Authentication required' },
           403: { description: 'HR, admin, or superadmin role required' },
@@ -1394,10 +1392,10 @@ const swaggerDocument = {
     '/payroll/payslips/{id}/approve': {
       patch: {
         summary: 'Approve Payslip',
-        description: 'Approves a pending payslip and records an audit entry. Finance role only.',
+        description: 'Approves a pending payslip, records an audit entry, and best-effort notifies the employee. Notification failures are logged and do not fail the approval. Finance role only.',
         tags: ['Payroll'], security: [{ BearerAuth: [] }],
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Payslip approved' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance role required' }, 404: { description: 'Payslip not found' }, 409: { description: 'Payslip is no longer pending' } },
+        responses: { 200: { description: 'Payslip approved; employee notification is best effort' }, 401: { description: 'Authentication required' }, 403: { description: 'Finance role required' }, 404: { description: 'Payslip not found' }, 409: { description: 'Payslip is no longer pending' } },
       },
     },
     '/payroll/payslips': {
@@ -1511,41 +1509,16 @@ const swaggerDocument = {
         },
       },
     },
-    '/audit-log': {
-      get: {
-        summary: 'List Audit Log Entries',
-        description:
-          'Returns a paginated, filterable list of audit log entries. ' +
-          'Restricted to superadmin and admin roles.',
-        tags: ['Audit Log'],
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 }, description: 'Page number' },
-          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 }, description: 'Results per page (max 100)' },
-          { in: 'query', name: 'actor', schema: { type: 'string' }, description: 'Filter by actor (User ObjectId)' },
-          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REJECT', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
-          { in: 'query', name: 'resource', schema: { type: 'string', example: 'SalaryStructure' }, description: 'Filter by entity type' },
-          { in: 'query', name: 'resourceId', schema: { type: 'string' }, description: 'Filter by specific document ID' },
-          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Start date (ISO 8601), inclusive' },
-          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'End date (ISO 8601), inclusive' },
-        ],
-        responses: {
-          200: { description: 'Audit log entries retrieved with pagination metadata' },
-          400: { description: 'Invalid date filter' },
-          401: { description: 'Unauthorized - Invalid or missing token' },
-          403: { description: 'Only superadmin and admin can view the audit log' },
-        },
-      },
-    },
     '/reports/attendance-summary': {
       get: {
         summary: 'Get Attendance Summary',
-        description: 'Aggregates attendance records by status and distinct employee. Restricted to superadmin, admin, and HR.',
+        description: 'Aggregates attendance records by status and distinct employee. If neither date bound is provided, the current UTC calendar month is used. Optionally group records by employee or User.department. Restricted to superadmin, admin, and HR.',
         tags: ['Reports'],
         security: [{ BearerAuth: [] }],
         parameters: [
           { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive UTC date (YYYY-MM-DD)' },
           { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive UTC date (YYYY-MM-DD)' },
+          { in: 'query', name: 'groupBy', schema: { type: 'string', enum: ['employee', 'department'] }, description: 'Optional attendance breakdown; groups contains employee IDs or department names and counts' },
         ],
         responses: {
           200: {
@@ -1562,6 +1535,10 @@ const swaggerDocument = {
                         total: { type: 'integer' },
                         employeeCount: { type: 'integer' },
                         byStatus: { type: 'object', additionalProperties: { type: 'integer' } },
+                        from: { type: 'string', nullable: true, example: '2026-10-01' },
+                        to: { type: 'string', nullable: true, example: '2026-10-31' },
+                        groupBy: { type: 'string', enum: ['employee', 'department'] },
+                        groups: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, count: { type: 'integer' } } } },
                       },
                     },
                   },
@@ -1569,7 +1546,7 @@ const swaggerDocument = {
               },
             },
           },
-          400: { description: 'Invalid date or from date after to date' },
+          400: { description: 'Invalid date, from date after to date, or unsupported groupBy value' },
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'HR/Admin role required' },
         },
@@ -1578,12 +1555,12 @@ const swaggerDocument = {
     '/reports/leave-summary': {
       get: {
         summary: 'Get Leave Summary',
-        description: 'Aggregates leave requests by status and leave type. Optional date bounds filter request start dates. Restricted to superadmin, admin, and HR.',
+        description: 'Aggregates leave requests by status and leave type. Requests are included when their date range overlaps the query range (startDate <= to and endDate >= from). If neither date bound is provided, the current UTC calendar month is used. Restricted to superadmin, admin, and HR.',
         tags: ['Reports'],
         security: [{ BearerAuth: [] }],
         parameters: [
-          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive request start date (YYYY-MM-DD)' },
-          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive request start date (YYYY-MM-DD)' },
+          { in: 'query', name: 'from', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive range start date (YYYY-MM-DD); when omitted, no lower bound applies' },
+          { in: 'query', name: 'to', schema: { type: 'string', format: 'date' }, description: 'Optional inclusive range end date (YYYY-MM-DD); when omitted, no upper bound applies' },
         ],
         responses: {
           200: {
@@ -1600,6 +1577,8 @@ const swaggerDocument = {
                         total: { type: 'integer' },
                         byStatus: { type: 'object', additionalProperties: { type: 'integer' } },
                         byType: { type: 'object', additionalProperties: { type: 'integer' } },
+                        from: { type: 'string', nullable: true, example: '2026-10-01' },
+                        to: { type: 'string', nullable: true, example: '2026-10-31' },
                       },
                     },
                   },
@@ -1658,23 +1637,6 @@ const swaggerDocument = {
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'HR/Admin role required' },
           400: { description: 'month must use YYYY-MM format' },
-        },
-      },
-    },
-    '/audit-log/{id}': {
-      get: {
-        summary: 'Get Single Audit Log Entry',
-        tags: ['Audit Log'],
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the audit log entry' },
-        ],
-        responses: {
-          200: { description: 'Audit log entry retrieved successfully' },
-          400: { description: 'Invalid ID format' },
-          401: { description: 'Unauthorized - Invalid or missing token' },
-          403: { description: 'Only superadmin and admin can view the audit log' },
-          404: { description: 'Audit log entry not found' },
         },
       },
     },
@@ -2023,6 +1985,284 @@ const swaggerDocument = {
         },
         responses: {
           200: { description: 'Document status updated successfully' },
+        },
+      },
+    },
+    '/audit-logs': {
+      get: {
+        summary: 'List Audit Log Entries',
+        description:
+          'Returns a paginated, filterable list of audit log entries. ' +
+          'Restricted to the superadmin role.',
+        tags: ['Audit Log'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', minimum: 1, default: 1 }, description: 'Page number' },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 }, description: 'Results per page (max 100)' },
+          { in: 'query', name: 'actor', schema: { type: 'string' }, description: 'Filter by actor (User ObjectId)' },
+          { in: 'query', name: 'entityType', schema: { type: 'string', example: 'SalaryStructure' }, description: 'Filter by entity type' },
+          { in: 'query', name: 'action', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REJECT', 'LOGIN', 'LOGOUT', 'PASSWORD_RESET', 'ACTIVATE', 'DEACTIVATE', 'OTHER'] }, description: 'Filter by action verb' },
+          { in: 'query', name: 'resourceId', schema: { type: 'string' }, description: 'Filter by specific document ID' },
+          { in: 'query', name: 'from', schema: { type: 'string', example: '2026-10-01' }, description: 'Start date (ISO 8601 date or timestamp), inclusive; date-only values use UTC midnight' },
+          { in: 'query', name: 'to', schema: { type: 'string', example: '2026-10-31' }, description: 'End date (ISO 8601 date or timestamp), inclusive; date-only values include the full UTC day' },
+        ],
+        responses: {
+          200: {
+            description: 'Audit log entries retrieved with pagination metadata',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Audit logs retrieved successfully.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        logs: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              _id: { type: 'string' },
+                              actor: { type: 'string' },
+                              actorName: { type: 'string' },
+                              actorRole: { type: 'string' },
+                              action: { type: 'string' },
+                              resource: { type: 'string' },
+                              resourceId: { type: 'string', nullable: true },
+                              meta: { description: 'Optional arbitrary JSON audit metadata; may be null' },
+                              createdAt: { type: 'string', format: 'date-time' },
+                            },
+                          },
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            total: { type: 'integer', example: 1 },
+                            page: { type: 'integer', example: 1 },
+                            limit: { type: 'integer', example: 20 },
+                            totalPages: { type: 'integer', example: 1 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                example: {
+                  success: true,
+                  message: 'Audit logs retrieved successfully.',
+                  data: {
+                    logs: [{ _id: '66f000000000000000000001', actor: '66f000000000000000000002', actorName: 'Super Admin', actorRole: 'superadmin', action: 'UPDATE', resource: 'SystemConfig', resourceId: 'leave.annualAllocation', meta: { before: { days: 15 }, after: { days: 20 } }, createdAt: '2026-10-05T12:00:00.000Z' }],
+                    pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid page/limit, actor ID, date, or reversed date range' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only superadmin can view the audit log' },
+        },
+      },
+    },
+    '/reports/performance-summary': {
+      get: {
+        summary: 'Get Performance Summary',
+        description: 'Aggregates employee self-review ratings and manager ratings. Optionally filter by performance cycle. Restricted to superadmin, admin, and HR.',
+        tags: ['Reports'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'cycleId', schema: { type: 'string' }, description: 'Optional performance cycle ID' },
+        ],
+        responses: {
+          200: { description: 'Performance review count, average ratings, and rating distribution retrieved successfully' },
+          400: { description: 'Invalid cycleId' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+        },
+      },
+    },
+    '/employee-documents/upload': {
+      post: {
+        summary: 'Upload My Document',
+        description: 'Any authenticated user may upload a document for their own account. Accepts PDF, JPEG, or PNG files up to 5 MB. The MIME type, filename extension, and file signature are validated. Files are stored in MongoDB; list endpoints return metadata only.',
+        tags: ['Employee Documents'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['category', 'file'],
+                properties: {
+                  category: { type: 'string', minLength: 1, maxLength: 50, example: 'certificate' },
+                  file: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Document uploaded successfully',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  message: 'Document uploaded successfully',
+                  data: { document: { id: '66f000000000000000000001', category: 'certificate', originalName: 'certificate.pdf', mimeType: 'application/pdf', size: 1024, createdAt: '2026-10-05T12:00:00.000Z' } },
+                },
+              },
+            },
+          },
+          400: { description: 'Missing category/file or unsupported/invalid file type' },
+          401: { description: 'Authentication required' },
+          413: { description: 'File exceeds 5 MB' },
+        },
+      },
+    },
+    '/employee-documents/me': {
+      get: {
+        summary: 'List My Documents',
+        description: 'Any authenticated user may list metadata for documents uploaded to their own account. File contents are not returned.',
+        tags: ['Employee Documents'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'The authenticated user’s document metadata retrieved successfully',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  message: 'Documents retrieved successfully',
+                  data: { documents: [{ _id: '66f000000000000000000001', userId: '66f000000000000000000002', category: 'certificate', originalName: 'certificate.pdf', mimeType: 'application/pdf', size: 1024, createdAt: '2026-10-05T12:00:00.000Z' }] },
+                },
+              },
+            },
+          },
+          401: { description: 'Authentication required' },
+        },
+      },
+    },
+    '/employee-documents/employee/{employeeId}': {
+      get: {
+        summary: 'List Employee Documents',
+        description: 'Only superadmin, admin, or HR may list metadata for an employee whose User role is employee. File contents are not returned.',
+        tags: ['Employee Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'employeeId', required: true, schema: { type: 'string' }, description: 'Employee User ObjectId' },
+        ],
+        responses: {
+          200: {
+            description: 'Employee document metadata retrieved successfully',
+            content: { 'application/json': { example: { success: true, message: 'Employee documents retrieved successfully', data: { documents: [{ _id: '66f000000000000000000001', category: 'certificate', originalName: 'certificate.pdf', mimeType: 'application/pdf', size: 1024, createdAt: '2026-10-05T12:00:00.000Z' }] } } } },
+          },
+          400: { description: 'Invalid employee ID' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR, admin, or superadmin role required' },
+          404: { description: 'Employee not found' },
+        },
+      },
+    },
+    '/employee-documents/{id}': {
+      delete: {
+        summary: 'Delete a Document',
+        description: 'Any authenticated user may delete only their own document. Superadmin, admin, and HR may delete any document. Inaccessible or missing documents return 404.',
+        tags: ['Employee Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the document' },
+        ],
+        responses: {
+          200: {
+            description: 'Document deleted successfully',
+            content: { 'application/json': { example: { success: true, message: 'Document deleted successfully', data: { document: { id: '66f000000000000000000001', category: 'certificate', originalName: 'certificate.pdf' } } } } },
+          },
+          400: { description: 'Invalid document ID' },
+          401: { description: 'Authentication required' },
+          404: { description: 'Document not found' },
+        },
+      },
+    },
+    '/audit-logs/{id}': {
+      get: {
+        summary: 'Get Single Audit Log Entry',
+        description: 'Restricted to the superadmin role.',
+        tags: ['Audit Log'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' }, description: 'MongoDB ObjectId of the audit log entry' },
+        ],
+        responses: {
+          200: { description: 'Audit log entry retrieved successfully' },
+          400: { description: 'Invalid ID format' },
+          401: { description: 'Unauthorized - Invalid or missing token' },
+          403: { description: 'Only superadmin can view the audit log' },
+          404: { description: 'Audit log entry not found' },
+        },
+      },
+    },
+    '/system-config': {
+      get: {
+        summary: 'Get System Configuration',
+        description: 'Any authenticated user may read all configured key/value settings, such as leave allocations and working hours.',
+        tags: ['System Config'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'System configuration retrieved successfully',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  message: 'System configuration retrieved successfully',
+                  data: { settings: [{ key: 'leave.annualAllocation', value: { days: 20 }, createdAt: '2026-10-05T12:00:00.000Z', updatedAt: '2026-10-05T12:00:00.000Z' }] },
+                },
+              },
+            },
+          },
+          401: { description: 'Authentication required' },
+        },
+      },
+      put: {
+        summary: 'Create or Update a System Setting',
+        description: 'Creates or updates one setting. Only superadmin may write settings. key must be 1-100 characters, start with a letter, and contain only letters, digits, dots, underscores, or hyphens. value is required and may be any JSON value. A successful create/update is recorded in the audit log.',
+        tags: ['System Config'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['key', 'value'],
+                properties: {
+                  key: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[A-Za-z][A-Za-z0-9._-]{0,99}$', example: 'leave.annualAllocation' },
+                  value: { description: 'Required; any JSON value is accepted', example: { days: 20 } },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'System configuration updated and audited successfully',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  message: 'System configuration updated successfully',
+                  data: { setting: { key: 'leave.annualAllocation', value: { days: 20 }, createdAt: '2026-10-05T12:00:00.000Z', updatedAt: '2026-10-05T12:00:00.000Z' } },
+                },
+              },
+            },
+          },
+          400: { description: 'Request body is not a JSON object, key is missing or invalid, or value is missing' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Only superadmin can update system configuration' },
         },
       },
     },
