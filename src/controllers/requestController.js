@@ -139,14 +139,20 @@ const decide = async (Model, label, req, res, next, status) => {
       meta: { status, decisionNote: request.decisionNote, employee: request.employee },
       req,
     });
-    if (Model.modelName === 'LeaveRequest') {
+    if (Model.modelName === 'LeaveRequest' || Model.modelName === 'WfhRequest') {
+      const requestType = Model.modelName === 'LeaveRequest' ? 'leave' : 'wfh';
+      const outcome = status === 'approved' ? 'approved' : 'rejected';
       try {
-        const outcome = status === 'approved' ? 'approved' : 'rejected';
+        const requestLabel = requestType === 'leave' ? `${request.type} leave` : 'WFH';
         const note = request.decisionNote ? ` Note: ${request.decisionNote}` : '';
-        const title = status === 'approved' ? 'Leave request approved' : 'Leave request rejected';
-        await notify(request.employee, `leave_${outcome}`, title, `Your ${request.type} leave request was ${outcome}.${note}`);
+        const title = `${requestLabel} request ${outcome}`;
+        await notify(request.employee, `${requestType}_${outcome}`, title, `Your ${requestLabel} request was ${outcome}.${note}`);
       } catch (notificationError) {
-        console.error('Failed to notify employee about leave decision:', notificationError);
+        console.error(`Failed to notify employee about ${Model.modelName} decision:`, {
+          userId: String(request.employee),
+          type: `${requestType}_${outcome}`,
+          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+        });
       }
     }
     const result = await populated(Model, { _id: request._id });

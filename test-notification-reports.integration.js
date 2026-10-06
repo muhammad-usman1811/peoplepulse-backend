@@ -19,6 +19,9 @@ const Notification = require('./src/models/Notification');
 const Attendance = require('./src/models/Attendance');
 const LeaveRequest = require('./src/models/LeaveRequest');
 const AuditLog = require('./src/models/AuditLog');
+const PerformanceCycle = require('./src/models/PerformanceCycle');
+const Review = require('./src/models/Review');
+const EmployeeDocument = require('./src/models/EmployeeDocument');
 
 const request = async (baseUrl, path, token, method = 'GET', body) => {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -28,6 +31,18 @@ const request = async (baseUrl, path, token, method = 'GET', body) => {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return { status: response.status, data: await response.json() };
+};
+
+const uploadRequest = async (baseUrl, path, token, category, filename, bytes, mimeType) => {
+  const form = new FormData();
+  form.set('category', category);
+  form.set('file', new Blob([bytes], { type: mimeType }), filename);
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
   });
   return { status: response.status, data: await response.json() };
 };
@@ -47,6 +62,7 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
   const employeeIds = [];
   const actorIds = [];
   let salaryStructureId;
+  let performanceCycleId;
 
   try {
     const suffix = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
@@ -77,6 +93,8 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
       allowances: [],
     });
     salaryStructureId = salaryStructure._id;
+    const performanceCycle = await PerformanceCycle.create({ period: `Integration-${suffix}` });
+    performanceCycleId = performanceCycle._id;
 
     const employee = await User.create({
       name: 'Integration Employee',
@@ -98,12 +116,60 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
     });
     users.push(employee, otherEmployee);
     employeeIds.push(employee._id, otherEmployee._id);
+    await Review.create([
+      { cycle: performanceCycle._id, employee: employee._id, selfReview: 'Integration review one', rating: 4, managerRating: 3 },
+      { cycle: performanceCycle._id, employee: otherEmployee._id, selfReview: 'Integration review two', rating: 5, managerRating: 4 },
+    ]);
 
     const adminToken = authToken(admin);
     const financeToken = authToken(finance);
     const hrToken = authToken(hr);
     const employeeToken = authToken(employee);
     const otherEmployeeToken = authToken(otherEmployee);
+
+    const uploadedDocument = await uploadRequest(
+      baseUrl,
+      '/documents/upload',
+      employeeToken,
+      'certificate',
+      'test-certificate.pdf',
+      Buffer.from('%PDF-1.4\nIntegration test file'),
+      'application/pdf'
+    );
+    assert.equal(uploadedDocument.status, 201);
+    const storedDocument = await EmployeeDocument.findById(uploadedDocument.data.data.document.id).select('+fileData');
+    assert.ok(storedDocument, 'uploaded document should persist in MongoDB');
+    assert.equal(storedDocument.fileData.toString(), '%PDF-1.4\nIntegration test file');
+
+    const listedDocuments = await request(baseUrl, '/documents/me', employeeToken);
+    assert.equal(listedDocuments.status, 200);
+    assert.equal(listedDocuments.data.data.documents.length, 1);
+    assert.equal(listedDocuments.data.data.documents[0].originalName, 'test-certificate.pdf');
+    assert.equal(listedDocuments.data.data.documents[0].category, 'certificate');
+    assert.equal(listedDocuments.data.data.documents[0].fileData, undefined);
+    const foreignDocuments = await request(baseUrl, '/documents/me', otherEmployeeToken);
+    assert.equal(foreignDocuments.data.data.documents.length, 0);
+
+    const invalidUpload = await uploadRequest(
+      baseUrl,
+      '/documents/upload',
+      employeeToken,
+      'other',
+      'not-a-pdf.pdf',
+      Buffer.from('not a PDF'),
+      'application/pdf'
+    );
+    assert.equal(invalidUpload.status, 400);
+    const oversizedUpload = await uploadRequest(
+      baseUrl,
+      '/documents/upload',
+      employeeToken,
+      'other',
+      'oversized.pdf',
+      Buffer.alloc(5 * 1024 * 1024 + 1, 65),
+      'application/pdf'
+    );
+    assert.equal(oversizedUpload.status, 413);
 
     const generated = await request(baseUrl, '/payroll/generate', hrToken, 'POST', { month: '2099-11' });
     assert.equal(generated.status, 201);
@@ -137,6 +203,7 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
       { employee: employee._id, date: new Date('2026-10-01T12:00:00.000Z'), status: 'present' },
     ]);
     await LeaveRequest.create([
+      { employee: employee._id, approver: admin._id, type: 'annual', status: 'approved', startDate: new Date('2026-08-30T00:00:00.000Z'), endDate: new Date('2026-09-02T00:00:00.000Z') },
       { employee: employee._id, approver: admin._id, type: 'annual', status: 'approved', startDate: new Date('2026-09-05T00:00:00.000Z'), endDate: new Date('2026-09-07T00:00:00.000Z') },
       { employee: employee._id, approver: admin._id, type: 'sick', status: 'pending', startDate: new Date('2026-09-18T00:00:00.000Z'), endDate: new Date('2026-09-18T00:00:00.000Z') },
       { employee: otherEmployee._id, approver: admin._id, type: 'casual', status: 'rejected', startDate: new Date('2026-09-27T00:00:00.000Z'), endDate: new Date('2026-09-27T00:00:00.000Z') },
@@ -148,6 +215,17 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
     assert.equal(attendance.data.data.total, 3);
     assert.equal(attendance.data.data.employeeCount, 2);
     assert.deepEqual(attendance.data.data.byStatus, { present: 1, late: 1, absent: 1 });
+    assert.equal(attendance.data.data.from, '2026-09-01');
+    assert.equal(attendance.data.data.to, '2026-09-30');
+
+    const attendanceByEmployee = await request(baseUrl, '/reports/attendance-summary?from=2026-09-01&to=2026-09-30&groupBy=employee', adminToken);
+    assert.equal(attendanceByEmployee.status, 200);
+    assert.equal(attendanceByEmployee.data.data.groups.length, 2);
+    assert.equal(attendanceByEmployee.data.data.groups.reduce((total, group) => total + group.count, 0), 3);
+
+    const attendanceByDepartment = await request(baseUrl, '/reports/attendance-summary?from=2026-09-01&to=2026-09-30&groupBy=department', adminToken);
+    assert.equal(attendanceByDepartment.status, 200);
+    assert.deepEqual(attendanceByDepartment.data.data.groups, [{ key: 'General', count: 3 }]);
 
     const attendanceRange = await request(baseUrl, '/reports/attendance-summary?from=2026-09-15&to=2026-09-30', adminToken);
     assert.equal(attendanceRange.data.data.total, 2);
@@ -158,9 +236,24 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
 
     const leave = await request(baseUrl, '/reports/leave-summary?from=2026-09-01&to=2026-09-30', adminToken);
     assert.equal(leave.status, 200);
-    assert.equal(leave.data.data.total, 3);
-    assert.deepEqual(leave.data.data.byStatus, { approved: 1, pending: 1, rejected: 1 });
-    assert.deepEqual(leave.data.data.byType, { annual: 1, sick: 1, casual: 1 });
+    assert.equal(leave.data.data.total, 4);
+    assert.deepEqual(leave.data.data.byStatus, { approved: 2, pending: 1, rejected: 1 });
+    assert.deepEqual(leave.data.data.byType, { annual: 2, sick: 1, casual: 1 });
+    assert.equal(leave.data.data.from, '2026-09-01');
+    assert.equal(leave.data.data.to, '2026-09-30');
+
+    const performance = await request(baseUrl, `/reports/performance-summary?cycleId=${performanceCycle._id}`, adminToken);
+    assert.equal(performance.status, 200);
+    assert.equal(performance.data.data.reviewCount, 2);
+    assert.equal(performance.data.data.managerReviewedCount, 2);
+    assert.equal(performance.data.data.averageRating, 4.5);
+    assert.equal(performance.data.data.averageManagerRating, 3.5);
+
+    const payrollSummary = await request(baseUrl, '/reports/payroll-summary?month=2099-11', adminToken);
+    assert.equal(payrollSummary.status, 200);
+    assert.equal(payrollSummary.data.data.totalPayslips, 2);
+    assert.equal(payrollSummary.data.data.totalGrossPay, 108000);
+    assert.equal(payrollSummary.data.data.totalNetPay, 108000);
 
     const leaveRange = await request(baseUrl, '/reports/leave-summary?from=2026-09-18&to=2026-09-27', adminToken);
     assert.equal(leaveRange.data.data.total, 2);
@@ -192,6 +285,9 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
     await Payslip.deleteMany({ employee: { $in: employeeIds } });
     await Attendance.deleteMany({ employee: { $in: employeeIds } });
     await LeaveRequest.deleteMany({ employee: { $in: employeeIds } });
+    await Review.deleteMany({ cycle: performanceCycleId });
+    await PerformanceCycle.deleteOne({ _id: performanceCycleId });
+    await EmployeeDocument.deleteMany({ userId: { $in: employeeIds } });
     await AuditLog.deleteMany({ actor: { $in: actorIds } });
     if (salaryStructureId) await SalaryStructure.deleteOne({ _id: salaryStructureId });
     if (users.length) await User.deleteMany({ _id: { $in: users.map((user) => user._id) } });

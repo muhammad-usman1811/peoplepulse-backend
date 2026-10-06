@@ -7,13 +7,13 @@ const {
 
 const router = express.Router();
 
-// Only superadmin and admin may read the audit trail
-const adminOnly = authorize('superadmin', 'admin');
+// Audit records are restricted to the Super Admin.
+const superAdminOnly = authorize('superadmin');
 
-router.use(protect, adminOnly);
+router.use(protect, superAdminOnly);
 
-// GET /api/audit-log            — paginated list with optional filters
-// GET /api/audit-log/:id        — single audit log entry
+// GET /api/audit-logs           — paginated list with optional filters
+// GET /api/audit-logs/:id       — single audit log entry
 router.get('/', listAuditLogs);
 router.get('/:id', getAuditLog);
 

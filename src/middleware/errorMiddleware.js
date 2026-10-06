@@ -33,8 +33,25 @@ const errorHandler = (err, req, res, next) => {
     return ApiResponse.error(res, message, null, 400);
   }
 
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    const isDocumentUpload = req.path.endsWith('/documents/upload')
+      || req.path.endsWith('/api/documents/upload');
+    const isFilePayload = isDocumentUpload || req.is('application/octet-stream');
+    const requestLimit = Number.isFinite(err.limit)
+      ? err.limit % (1024 * 1024) === 0
+        ? `${err.limit / (1024 * 1024)}MB`
+        : `${Math.ceil(err.limit / 1024)}KB`
+      : 'the configured limit';
+    const message = isFilePayload
+      ? 'Uploaded file exceeds the 4MB limit'
+      : req.is('application/json') || req.is('application/x-www-form-urlencoded')
+        ? `Request body exceeds ${requestLimit}`
+        : 'Request body is too large';
+    return ApiResponse.error(res, message, null, 413);
+  }
+
   // Default internal server error
-  return ApiResponse.error(res, isProduction ? 'Internal Server Error' : error.message || 'Internal Server Error', isProduction ? null : err.stack, error.statusCode || 500);
+  return ApiResponse.error(res, isProduction ? 'Internal Server Error' : error.message || 'Internal Server Error', isProduction ? null : err.stack, error.statusCode || err.status || 500);
 };
 
 module.exports = errorHandler;

@@ -2,6 +2,8 @@ node_modules/
 .env
 .env.local
 .env.*
+# BUG-6 FIX: !.env.example MUST come after all .env* patterns to not be cancelled.
+# Previously ".env*" at line 13 was shadowing "!.env.example" at line 5.
 !.env.example
 *.pem
 *.key
@@ -10,4 +12,3 @@ npm-debug.log
 *.log
 .DS_Store
 .vercel
-.env*

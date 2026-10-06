@@ -240,7 +240,42 @@ test('leave rejection notifies the employee with the decision note', async () =>
   assert.match(notification.body, /Please choose different dates\./);
 });
 
+test('WFH approval and rejection notify the employee', async (t) => {
+  for (const status of ['approved', 'rejected']) {
+    await t.test(status, async () => {
+      let notification;
+      WfhRequest.findOneAndUpdate = async (_filter, update) => ({
+        ...requestRecord(),
+        employee: ids.employee,
+        type: undefined,
+        ...update.$set,
+      });
+      WfhRequest.findOne = () => query(requestRecord());
+      AuditLog.record = async () => {};
+      Notification.create = async (values) => {
+        notification = new Notification(values);
+        await notification.validate();
+        return notification;
+      };
+
+      const res = await runController(controller.wfh[status === 'approved' ? 'approve' : 'reject'], employeeRequest({
+        body: { note: 'Please coordinate with your team.' },
+        user: { _id: ids.manager, role: 'admin' },
+      }));
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(notification.userId, ids.employee);
+      assert.equal(notification.type, `wfh_${status}`);
+      assert.equal(notification.title, `WFH request ${status}`);
+      assert.match(notification.body, new RegExp(`Your WFH request was ${status}`));
+      assert.match(notification.body, /Please coordinate with your team\./);
+      assert.ok(notification instanceof Notification);
+    });
+  }
+});
+
 test('leave approval succeeds when notification delivery fails', async () => {
+  let logArgs;
   LeaveRequest.findOneAndUpdate = async (_filter, update) => ({
     ...requestRecord(),
     employee: ids.employee,
@@ -249,7 +284,7 @@ test('leave approval succeeds when notification delivery fails', async () => {
   LeaveRequest.findOne = () => query({ ...requestRecord(), status: 'approved' });
   AuditLog.record = async () => {};
   Notification.create = async () => { throw new Error('notification database unavailable'); };
-  console.error = () => {};
+  console.error = (...args) => { logArgs = args; };
 
   const res = await runController(controller.leave.approve, employeeRequest({
     user: { _id: ids.manager, role: 'admin' },
@@ -257,6 +292,9 @@ test('leave approval succeeds when notification delivery fails', async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.data.request.status, 'approved');
+  assert.equal(logArgs[1].userId, String(ids.employee));
+  assert.equal(logArgs[1].type, 'leave_approved');
+  assert.equal(logArgs[1].error, 'notification database unavailable');
 });
 
 test('employees can list only their own leave requests', async () => {

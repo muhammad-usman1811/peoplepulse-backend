@@ -1,0 +1,20 @@
+# BUG-8 FIX: Normalize line endings for all text files.
+# This prevents Git from showing ~100 "modified" files solely due to CRLF/LF
+# differences between Windows and the remote (Linux-style) repository.
+* text=auto
+
+# Force LF in source files on checkout (consistent cross-platform)
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.env.example text eol=lf
+
+# Binary files – never modify line endings
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pem  binary
+*.key  binary
+*.crt  binary

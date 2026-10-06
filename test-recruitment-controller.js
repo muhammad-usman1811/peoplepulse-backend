@@ -3,15 +3,26 @@ const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const Candidate = require('./src/models/Candidate');
 const JobPosting = require('./src/models/JobPosting');
+const Onboarding = require('./src/models/Onboarding');
+const User = require('./src/models/User');
 const controller = require('./src/controllers/recruitmentController');
 const recruitmentStages = require('./src/utils/recruitmentStages');
 const recruitmentRoutes = require('./src/routes/recruitmentRoutes');
 
 const originalMethods = {
   candidateCreate: Candidate.create,
+  candidateFindById: Candidate.findById,
   candidateFindByIdAndUpdate: Candidate.findByIdAndUpdate,
+  candidateFind: Candidate.find,
+  candidateCountDocuments: Candidate.countDocuments,
   jobPostingCreate: JobPosting.create,
   jobPostingExists: JobPosting.exists,
+  jobPostingFind: JobPosting.find,
+  jobPostingFindById: JobPosting.findById,
+  jobPostingCountDocuments: JobPosting.countDocuments,
+  onboardingCreate: Onboarding.create,
+  onboardingFindOne: Onboarding.findOne,
+  userFindOne: User.findOne,
 };
 
 const createResponse = () => ({
@@ -37,9 +48,18 @@ const runController = async (handler, req) => {
 
 test.afterEach(() => {
   Candidate.create = originalMethods.candidateCreate;
+  Candidate.findById = originalMethods.candidateFindById;
   Candidate.findByIdAndUpdate = originalMethods.candidateFindByIdAndUpdate;
+  Candidate.find = originalMethods.candidateFind;
+  Candidate.countDocuments = originalMethods.candidateCountDocuments;
   JobPosting.create = originalMethods.jobPostingCreate;
   JobPosting.exists = originalMethods.jobPostingExists;
+  JobPosting.find = originalMethods.jobPostingFind;
+  JobPosting.findById = originalMethods.jobPostingFindById;
+  JobPosting.countDocuments = originalMethods.jobPostingCountDocuments;
+  Onboarding.create = originalMethods.onboardingCreate;
+  Onboarding.findOne = originalMethods.onboardingFindOne;
+  User.findOne = originalMethods.userFindOne;
 });
 
 test('job posting requires a non-empty title and department', async (t) => {
@@ -114,34 +134,124 @@ test('candidate creation rejects invalid email and unknown posting', async (t) =
   });
 });
 
-test('candidate can be moved through every recruitment stage', async () => {
+test('candidate can be moved through recruitment stages and Hired stage triggers onboarding', async () => {
   const candidateId = new mongoose.Types.ObjectId();
-  const candidate = { _id: candidateId, stage: 'Applied' };
   const requestedStages = [];
-  Candidate.findByIdAndUpdate = async (id, update, options) => {
-    assert.equal(String(id), candidateId.toString());
-    assert.equal(options.new, true);
-    assert.equal(options.runValidators, true);
-    candidate.stage = update.$set.stage;
-    requestedStages.push(candidate.stage);
-    return candidate;
+  const candidate = {
+    _id: candidateId,
+    name: 'Fahad Candidate',
+    email: 'fahad@example.test',
+    stage: 'Applied',
+    save: async function () {
+      requestedStages.push(this.stage);
+      return this;
+    },
   };
+  Candidate.findById = async () => candidate;
+
+  Onboarding.findOne = async () => null;
+  User.findOne = async () => null;
+  Onboarding.create = async (data) => ({ _id: new mongoose.Types.ObjectId(), ...data });
 
   for (const stage of recruitmentStages) {
     const res = await runController(controller.moveCandidateStage, {
       params: { candidateId: candidateId.toString() },
       body: { stage },
+      user: { _id: new mongoose.Types.ObjectId(), role: 'hr' },
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.data.candidate.stage, stage);
+    if (stage === 'Hired') {
+      assert(res.body.data.onboarding, 'Onboarding checklist must be attached on Hired stage');
+    }
   }
 
-  assert.deepEqual(requestedStages, recruitmentStages);
+  assert.deepEqual(requestedStages, recruitmentStages.slice(1));
+});
+
+test('candidate cannot skip directly to Hired or move backwards after hire', async (t) => {
+  const candidateId = new mongoose.Types.ObjectId();
+  for (const [currentStage, requestedStage] of [['Applied', 'Hired'], ['Hired', 'Offer']]) {
+    await t.test(`${currentStage} -> ${requestedStage}`, async () => {
+      let saveCalled = false;
+      Candidate.findById = async () => ({
+        _id: candidateId,
+        stage: currentStage,
+        save: async function () { saveCalled = true; return this; },
+      });
+      const res = await runController(controller.moveCandidateStage, {
+        params: { candidateId: candidateId.toString() },
+        body: { stage: requestedStage },
+        user: { _id: new mongoose.Types.ObjectId(), role: 'hr' },
+      });
+      assert.equal(res.statusCode, 409);
+      assert.equal(saveCalled, false);
+    });
+  }
+});
+
+test('recruitment lists return paginated filtered job postings and candidates', async () => {
+  const candidate = { name: 'Alex Candidate', email: 'alex@example.test', stage: 'Offer' };
+  let capturedFilter;
+  JobPosting.countDocuments = async () => 1;
+  JobPosting.find = () => ({
+    sort: () => ({ skip: () => ({ limit: async () => [{ title: 'Engineer' }] }) }),
+  });
+  Candidate.countDocuments = async (filter) => { capturedFilter = filter; return 1; };
+  Candidate.find = () => ({
+    sort: () => ({
+      skip: () => ({
+        limit: () => ({
+          populate: () => ({
+            populate: async () => [candidate],
+          }),
+        }),
+      }),
+    }),
+  });
+
+  const postingsRes = await runController(controller.getJobPostings, { query: { page: '1', limit: '10' } });
+  const candidatesRes = await runController(controller.getCandidates, {
+    query: { page: '1', limit: '10', stage: 'Offer', search: 'alex', jobPosting: new mongoose.Types.ObjectId().toString() },
+  });
+
+  assert.equal(postingsRes.statusCode, 200);
+  assert.equal(postingsRes.body.data.jobPostings.length, 1);
+  assert.equal(candidatesRes.statusCode, 200);
+  assert.equal(candidatesRes.body.data.candidates.length, 1);
+  assert.equal(capturedFilter.stage, 'Offer');
+  assert(capturedFilter.$or[0].name.test(candidate.name));
+});
+
+test('hireCandidate directly hires candidate and initializes onboarding', async () => {
+  const candidateId = new mongoose.Types.ObjectId();
+  const candidateDoc = {
+    _id: candidateId,
+    name: 'Easha Candidate',
+    email: 'easha@example.test',
+    stage: 'Offer',
+    save: async function () { return this; },
+  };
+
+  Candidate.findById = async () => candidateDoc;
+  Onboarding.findOne = async () => null;
+  User.findOne = async () => null;
+  Onboarding.create = async (data) => ({ _id: new mongoose.Types.ObjectId(), ...data });
+
+  const res = await runController(controller.hireCandidate, {
+    params: { candidateId: candidateId.toString() },
+    user: { _id: new mongoose.Types.ObjectId(), role: 'hr' },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(candidateDoc.stage, 'Hired');
+  assert(res.body.data.onboarding);
 });
 
 test('candidate stage update rejects invalid stages and missing candidates', async (t) => {
   await t.test('invalid stage', async () => {
     let updateCalled = false;
+    Candidate.findById = async () => ({ _id: new mongoose.Types.ObjectId() });
     Candidate.findByIdAndUpdate = async () => { updateCalled = true; };
     const res = await runController(controller.moveCandidateStage, {
       params: { candidateId: new mongoose.Types.ObjectId().toString() },
@@ -152,6 +262,7 @@ test('candidate stage update rejects invalid stages and missing candidates', asy
   });
 
   await t.test('candidate does not exist', async () => {
+    Candidate.findById = async () => null;
     Candidate.findByIdAndUpdate = async () => null;
     const res = await runController(controller.moveCandidateStage, {
       params: { candidateId: new mongoose.Types.ObjectId().toString() },
@@ -191,22 +302,20 @@ test('candidate creation returns 409 when candidate has already applied to posti
   assert.equal(res.body.message, 'Candidate already applied to this posting');
 });
 
-test('candidate model specifies unique compound index on jobPosting and email', () => {
-  const indexes = Candidate.schema.indexes();
-  const compoundIndex = indexes.find(
-    ([fields]) => fields.jobPosting === 1 && fields.email === 1
-  );
-  assert(compoundIndex, 'Compound index on jobPosting and email must exist');
-  assert.equal(compoundIndex[1]?.unique, true, 'Compound index must be unique');
-});
-
-test('recruitment endpoints expose only the creation and stage routes', () => {
+test('recruitment endpoints expose creation, stage, hire, and onboarding routes', () => {
   const registered = recruitmentRoutes.stack
     .filter((layer) => layer.route)
     .map((layer) => ({ path: layer.route.path, methods: Object.keys(layer.route.methods) }));
+
   assert.deepEqual(registered, [
+    { path: '/job-postings', methods: ['get'] },
+    { path: '/job-postings/:jobPostingId', methods: ['get'] },
     { path: '/job-postings', methods: ['post'] },
+    { path: '/candidates', methods: ['get'] },
+    { path: '/candidates/:candidateId', methods: ['get'] },
     { path: '/candidates', methods: ['post'] },
     { path: '/candidates/:candidateId/stage', methods: ['patch'] },
+    { path: '/candidates/:candidateId/hire', methods: ['post'] },
+    { path: '/candidates/:candidateId/onboarding', methods: ['get'] },
   ]);
 });

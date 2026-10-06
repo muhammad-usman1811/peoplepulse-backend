@@ -11,6 +11,11 @@ const validateManager = require('../utils/managerValidation');
 const { buildNameSearchTokens, searchDigest } = require('../utils/searchIndex');
 const recordAudit = require('../utils/recordAudit');
 const { isValidPhoneNumber } = require('../utils/phoneValidation');
+const Candidate = require('../models/Candidate');
+const Onboarding = require('../models/Onboarding');
+const Document = require('../models/Document');
+const notify = require('../utils/notify');
+const { parsePositiveInteger } = require('../utils/pagination');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -38,14 +43,6 @@ const employeeFields = (employee) => ({
 const loadEmployee = (id) => User.findById(id).populate('manager', 'name email employeeId');
 
 const findEmployeeTarget = async (id) => User.findOne({ _id: id, role: 'employee' });
-
-const parsePositiveInteger = (value, fallback, maximum = Number.MAX_SAFE_INTEGER) => {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) return null;
-  return parsed;
-};
 
 const referenceModels = { department: Department, designation: Designation, location: Location };
 
@@ -211,6 +208,45 @@ exports.createEmployee = async (req, res, next) => {
       resourceId: employee._id,
       meta: { changedFields: ['name', 'email', 'employeeId', 'department', 'designation', 'location', 'status', 'manager', ...(salaryStructure !== undefined ? ['salaryStructure', 'monthlySalary'] : [])] },
     });
+
+    const hiredCandidates = await Candidate.find({
+      email: normalizedEmail,
+      stage: 'Hired',
+      onboarding: { $exists: true, $ne: null },
+    }).sort({ updatedAt: -1 }).select('_id onboarding');
+    const hiredCandidate = hiredCandidates[0];
+
+    if (hiredCandidate) {
+      await Onboarding.updateMany(
+        { hireIdentityEmail: normalizedEmail },
+        { $set: { employee: employee._id } }
+      );
+      await Onboarding.updateMany(
+        { candidate: { $in: hiredCandidates.map((candidate) => candidate._id) } },
+        { $set: { employee: employee._id } }
+      );
+      await Document.updateMany(
+        { candidate: { $in: hiredCandidates.map((candidate) => candidate._id) } },
+        {
+          $set: {
+            employee: employee._id,
+            ...(hiredCandidate.onboarding ? { onboarding: hiredCandidate.onboarding } : {}),
+          },
+        }
+      );
+    }
+
+    const employeeOnboarding = await Onboarding.findOne({ employee: employee._id });
+    const welcomeMessage = employeeOnboarding
+      ? 'Your employee account has been created. You can now access your onboarding checklist.'
+      : 'Your employee account has been created. No onboarding checklist is linked yet; please contact HR.';
+    notify(
+      employee._id,
+      'SYSTEM',
+      'Welcome to PeoplePulse!',
+      welcomeMessage
+    ).catch(() => { });
+
     const result = await loadEmployee(employee._id);
     return ApiResponse.success(res, 'Employee created successfully', { employee: employeeFields(result) }, 201);
   } catch (err) {
