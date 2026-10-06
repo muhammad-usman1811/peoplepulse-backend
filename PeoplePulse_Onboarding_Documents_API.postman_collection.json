@@ -1,0 +1,122 @@
+{
+  "info": {
+    "name": "PeoplePulse Onboarding & Documents API",
+    "description": "API Postman Collection for PeoplePulse HRMS Onboarding, Task Management, Document Verification, and Recruitment Handoff. Document upload uses raw application/octet-stream bytes at POST /documents/upload (maximum 4MB per file).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Hire Candidate and Trigger Onboarding",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/recruitment/candidates/{{candidateId}}/hire"
+      }
+    },
+    {
+      "name": "Create Onboarding Checklist",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Engineering Onboarding Checklist\",\n  \"candidate\": \"{{candidateId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/onboarding"
+      }
+    },
+    {
+      "name": "Get My Onboarding Checklist",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" }
+        ],
+        "url": "{{baseUrl}}/onboarding/my-onboarding"
+      }
+    },
+    {
+      "name": "List All Onboarding Checklists",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" }
+        ],
+        "url": "{{baseUrl}}/onboarding?page=1&limit=10"
+      }
+    },
+    {
+      "name": "Update Task Status",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Completed\"\n}"
+        },
+        "url": "{{baseUrl}}/onboarding/{{onboardingId}}/tasks/{{taskId}}"
+      }
+    },
+    {
+      "name": "Upload Document",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" },
+          { "key": "Content-Type", "value": "application/octet-stream" }
+        ],
+        "body": {
+          "mode": "file",
+          "file": {
+            "src": "./sample-document.pdf"
+          }
+        },
+        "url": "{{baseUrl}}/documents/upload?title=CNIC%20Identification%20Document&category=Identification"
+      }
+    },
+    {
+      "name": "Download Document File",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "******" }
+        ],
+        "url": "{{baseUrl}}/documents/{{documentId}}/file"
+      }
+    },
+    {
+      "name": "Get My Documents",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{employeeToken}}" }
+        ],
+        "url": "{{baseUrl}}/documents/my-documents?page=1&limit=10"
+      }
+    },
+    {
+      "name": "Approve Document",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Approved\"\n}"
+        },
+        "url": "{{baseUrl}}/documents/{{documentId}}/status"
+      }
+    }
+  ]
+}
