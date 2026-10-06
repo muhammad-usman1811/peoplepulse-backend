@@ -7,6 +7,7 @@ const CandidateSchema = new mongoose.Schema(
     email: { type: String, required: true, trim: true, lowercase: true, maxlength: 254 },
     jobPosting: { type: mongoose.Schema.Types.ObjectId, ref: 'JobPosting', required: true },
     stage: { type: String, enum: recruitmentStages, default: 'Applied' },
+    onboarding: { type: mongoose.Schema.Types.ObjectId, ref: 'Onboarding' },
   },
   { timestamps: true }
 );

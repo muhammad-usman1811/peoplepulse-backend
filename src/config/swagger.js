@@ -696,19 +696,23 @@ const swaggerDocument = {
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: {
-            type: 'object', required: ['name', 'email', 'password'],
-            properties: {
-              name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email' },
-              password: { type: 'string', minLength: 6, maxLength: 72 }, employeeId: { type: 'string', maxLength: 64 },
-              phoneNumber: { type: 'string', maxLength: 30, example: '+92 300 1234567' },
-              department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
-              manager: { type: 'string', nullable: true },
-              salaryStructure: { type: 'string', description: 'Salary structure ObjectId; provide with monthlySalary' },
-              monthlySalary: { type: 'number', exclusiveMinimum: 0, description: 'Monthly base used to calculate basic pay' },
-              status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
-            },
-          } } },
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object', required: ['name', 'email', 'password'],
+                properties: {
+                  name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email' },
+                  password: { type: 'string', minLength: 6, maxLength: 72 }, employeeId: { type: 'string', maxLength: 64 },
+                  phoneNumber: { type: 'string', maxLength: 30, example: '+92 300 1234567' },
+                  department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
+                  manager: { type: 'string', nullable: true },
+                  salaryStructure: { type: 'string', description: 'Salary structure ObjectId; provide with monthlySalary' },
+                  monthlySalary: { type: 'number', exclusiveMinimum: 0, description: 'Monthly base used to calculate basic pay' },
+                  status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
+                },
+              }
+            }
+          },
         },
         responses: {
           201: { description: 'Employee created successfully' },
@@ -728,9 +732,15 @@ const swaggerDocument = {
       put: {
         summary: 'Update Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, salaryStructure: { type: 'string', nullable: true }, monthlySalary: { type: 'number', nullable: true }, isActive: { type: 'boolean' } },
-        } } } },
+        requestBody: {
+          required: true, content: {
+            'application/json': {
+              schema: {
+                type: 'object', properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, salaryStructure: { type: 'string', nullable: true }, monthlySalary: { type: 'number', nullable: true }, isActive: { type: 'boolean' } },
+              }
+            }
+          }
+        },
         responses: { 200: { description: 'Employee updated successfully' }, 400: { description: 'Invalid employee fields' }, 401: { description: 'Authentication required' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' }, 409: { description: 'Employee ID already exists' } },
       },
       delete: {
@@ -1070,6 +1080,19 @@ const swaggerDocument = {
       },
     },
     '/recruitment/job-postings': {
+      get: {
+        summary: 'List Recruitment Job Postings',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 10, maximum: 100 } },
+        ],
+        responses: {
+          200: { description: 'Paginated job postings retrieved successfully' },
+          400: { description: 'Invalid pagination parameters' },
+        },
+      },
       post: {
         summary: 'Create a Recruitment Job Posting',
         description: 'HR, admin, or superadmin users can create a posting. Title and department are required.',
@@ -1099,6 +1122,22 @@ const swaggerDocument = {
       },
     },
     '/recruitment/candidates': {
+      get: {
+        summary: 'List Recruitment Candidates',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 10, maximum: 100 } },
+          { in: 'query', name: 'stage', schema: { type: 'string', enum: ['Applied', 'Screening', 'Interview', 'Offer', 'Hired'] } },
+          { in: 'query', name: 'jobPosting', schema: { type: 'string' } },
+          { in: 'query', name: 'search', schema: { type: 'string', maxLength: 120 } },
+        ],
+        responses: {
+          200: { description: 'Paginated filtered candidates retrieved successfully' },
+          400: { description: 'Invalid pagination or filters' },
+        },
+      },
       post: {
         summary: 'Add a Candidate to a Job Posting',
         description: 'New candidates start in the Applied stage.',
@@ -1130,10 +1169,35 @@ const swaggerDocument = {
         },
       },
     },
+    '/recruitment/job-postings/{jobPostingId}': {
+      get: {
+        summary: 'Get Recruitment Job Posting',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'jobPostingId', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Job posting retrieved successfully' },
+          404: { description: 'Job posting not found' },
+        },
+      },
+    },
+    '/recruitment/candidates/{candidateId}': {
+      get: {
+        summary: 'Get Recruitment Candidate',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Candidate retrieved successfully' },
+          404: { description: 'Candidate not found' },
+          409: { description: 'Invalid recruitment stage transition' },
+        },
+      },
+    },
     '/recruitment/candidates/{candidateId}/stage': {
       patch: {
         summary: 'Move a Candidate to a Pipeline Stage',
-        description: 'Sets the candidate stage to one of the supported recruitment stages.',
+        description: 'Candidates advance one stage at a time; hired candidates cannot move backwards.',
         tags: ['Recruitment'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'candidateId', in: 'path', required: true, schema: { type: 'string' } }],
@@ -1308,9 +1372,15 @@ const swaggerDocument = {
         description: 'Creates pending payslips for active employees who do not already have one for the month. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
         tags: ['Payroll'],
         security: [{ BearerAuth: [] }],
-        requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', required: ['month'], properties: { month: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$', example: '2026-09' } },
-        } } } },
+        requestBody: {
+          required: true, content: {
+            'application/json': {
+              schema: {
+                type: 'object', required: ['month'], properties: { month: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$', example: '2026-09' } },
+              }
+            }
+          }
+        },
         responses: {
           201: { description: 'Payslips generated successfully' },
           200: { description: 'No new payslips were needed' },
@@ -1608,8 +1678,355 @@ const swaggerDocument = {
         },
       },
     },
+    '/onboarding': {
+      get: {
+        summary: 'List Onboarding Checklists',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 10 } },
+          { in: 'query', name: 'status', schema: { type: 'string', enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'] } },
+          { in: 'query', name: 'employee', schema: { type: 'string' } },
+          { in: 'query', name: 'candidate', schema: { type: 'string' } },
+        ],
+        responses: {
+          200: { description: 'Onboarding checklists retrieved successfully' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'HR/Admin role required' },
+        },
+      },
+      post: {
+        summary: 'Create Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string', example: 'Engineering Onboarding Checklist' },
+                  employee: { type: 'string' },
+                  candidate: { type: 'string' },
+                  targetCompletionDate: { type: 'string', format: 'date' },
+                  tasks: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        title: { type: 'string' },
+                        category: { type: 'string', enum: ['Documentation', 'IT Setup', 'HR Orientation', 'Training', 'General'] },
+                        documentRequirement: {
+                          type: 'string',
+                          enum: ['identityDocuments', 'employmentDocuments'],
+                          description: 'For Documentation tasks: identity requires approved Identification, Personal, and Academic documents; employment requires approved Employment and Tax documents.',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Onboarding checklist created' },
+          400: { description: 'Invalid payload' },
+        },
+      },
+    },
+    '/onboarding/my-onboarding': {
+      get: {
+        summary: 'Get Current User Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'Active onboarding checklist retrieved successfully' },
+          404: { description: 'No active onboarding checklist found' },
+        },
+      },
+    },
+    '/onboarding/{id}': {
+      get: {
+        summary: 'Get Onboarding Checklist Details',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Onboarding checklist details' },
+          404: { description: 'Not found' },
+        },
+      },
+      patch: {
+        summary: 'Update Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  status: { type: 'string', enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Updated successfully' },
+        },
+      },
+      delete: {
+        summary: 'Delete Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Deleted successfully' },
+        },
+      },
+    },
+    '/onboarding/{id}/tasks': {
+      post: {
+        summary: 'Add Task to Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['title'],
+                properties: {
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  category: { type: 'string', enum: ['Documentation', 'IT Setup', 'HR Orientation', 'Training', 'General'] },
+                  documentRequirement: {
+                    type: 'string',
+                    enum: ['identityDocuments', 'employmentDocuments'],
+                    description: 'Optional auto-completion rule; every required document category must be approved.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Task added successfully' },
+        },
+      },
+    },
+    '/onboarding/{id}/tasks/{taskId}': {
+      patch: {
+        summary: 'Update Task in Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
+          { in: 'path', name: 'taskId', required: true, schema: { type: 'string' } },
+        ],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['Pending', 'In Progress', 'Completed'] },
+                  description: { type: 'string' },
+                  documentRequirement: {
+                    type: 'string',
+                    enum: ['identityDocuments', 'employmentDocuments'],
+                    description: 'Optional auto-completion rule for Documentation tasks; set null or empty to clear.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Task updated successfully' },
+        },
+      },
+      delete: {
+        summary: 'Delete Task from Onboarding Checklist',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
+          { in: 'path', name: 'taskId', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          200: { description: 'Task deleted successfully' },
+        },
+      },
+    },
+    '/onboarding/trigger-from-candidate/{candidateId}': {
+      post: {
+        summary: 'Trigger Onboarding Checklist from Hired Candidate',
+        tags: ['Onboarding'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Onboarding checklist triggered successfully' },
+        },
+      },
+    },
+    '/recruitment/candidates/{candidateId}/hire': {
+      post: {
+        summary: 'Hire Candidate and Trigger Onboarding Checklist',
+        description: 'Candidates must be at the Offer stage. Hired candidates sharing an email address reuse one onboarding checklist.',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Candidate hired and onboarding initialized successfully' },
+          409: { description: 'Candidate must reach Offer before hiring' },
+        },
+      },
+    },
+    '/recruitment/candidates/{candidateId}/onboarding': {
+      get: {
+        summary: 'Get Candidate Onboarding Checklist',
+        tags: ['Recruitment'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Candidate onboarding retrieved successfully' },
+        },
+      },
+    },
+    '/documents': {
+      get: {
+        summary: 'List Documents',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 10 } },
+          { in: 'query', name: 'category', schema: { type: 'string' } },
+          { in: 'query', name: 'status', schema: { type: 'string', enum: ['Pending', 'Approved', 'Rejected'] } },
+        ],
+        responses: {
+          200: { description: 'Documents retrieved successfully' },
+        },
+      },
+      post: {
+        summary: 'Deprecated document registration endpoint',
+        description: 'This endpoint rejects requests because client-supplied file URLs and metadata are not verified. Use POST /documents/upload and send the raw file bytes as application/octet-stream.',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          400: { description: 'Unverified file metadata is not accepted' },
+        },
+      },
+    },
+    '/documents/upload': {
+      post: {
+        summary: 'Upload a Document File',
+        description: 'Send raw file bytes as application/octet-stream. The server verifies the file signature and enforces a 4MB per-file limit before storing in MongoDB. Supported types: PDF, JPEG, PNG, WebP, DOC, DOCX. Pass metadata in query parameters. Storage quotas default to 50MB per uploader and 1GB total; configure DOCUMENT_USER_STORAGE_QUOTA_BYTES and DOCUMENT_TOTAL_STORAGE_QUOTA_BYTES. Vercel deployments are limited to 4MB to remain below the platform request-body limit.',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { in: 'query', name: 'title', required: true, schema: { type: 'string', maxLength: 200 } },
+          { in: 'query', name: 'category', schema: { type: 'string', enum: ['Personal', 'Identification', 'Academic', 'Employment', 'Tax', 'Legal', 'Onboarding', 'Other'] } },
+          { in: 'query', name: 'description', schema: { type: 'string', maxLength: 500 } },
+          { in: 'query', name: 'employee', schema: { type: 'string', description: 'HR/admin only' } },
+          { in: 'query', name: 'candidate', schema: { type: 'string', description: 'HR/admin only' } },
+          { in: 'query', name: 'onboarding', schema: { type: 'string' } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/octet-stream': {
+              schema: { type: 'string', format: 'binary' },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Validated document uploaded successfully' },
+          413: { description: 'File exceeds the 4MB limit or uploader storage quota' },
+          415: { description: 'Unsupported or invalid file signature' },
+          507: { description: 'Total document storage quota has been reached' },
+        },
+      },
+    },
+    '/documents/my-documents': {
+      get: {
+        summary: 'Get My Documents',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: { description: 'My documents retrieved successfully' },
+        },
+      },
+    },
+    '/documents/{id}': {
+      get: {
+        summary: 'Get Document Details',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Document details' },
+        },
+      },
+      delete: {
+        summary: 'Delete Document',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Document deleted successfully' },
+        },
+      },
+    },
+    '/documents/{id}/file': {
+      get: {
+        summary: 'Download Document File',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'File bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } },
+          403: { description: 'Not authorized to download document' },
+          404: { description: 'Document or file not found' },
+        },
+      },
+    },
+    '/documents/{id}/status': {
+      patch: {
+        summary: 'Approve or Reject Document',
+        tags: ['Documents'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: ['Approved', 'Rejected'] },
+                  rejectionReason: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Document status updated successfully' },
+        },
+      },
+    },
   },
 };
 
 module.exports = swaggerDocument;
-

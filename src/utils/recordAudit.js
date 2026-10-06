@@ -13,7 +13,9 @@ const recordAudit = ({ req, actor = req && req.user, action, resource, resourceI
     meta,
     req,
   }).catch((error) => {
-    console.error(`[AuditLog] Failed to record ${action} ${resource}:`, error.message);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(`[AuditLog] Failed to record ${action} ${resource}:`, error.message);
+    }
   });
 };
 
