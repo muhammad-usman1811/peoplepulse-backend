@@ -50,8 +50,11 @@ const errorHandler = (err, req, res, next) => {
     return ApiResponse.error(res, message, null, 413);
   }
 
-  // Default internal server error
-  return ApiResponse.error(res, isProduction ? 'Internal Server Error' : error.message || 'Internal Server Error', isProduction ? null : err.stack, error.statusCode || err.status || 500);
+  // Default internal server error. 4xx errors that are safe to show (body-parser
+  // marks them with expose, e.g. malformed JSON) keep their message in production.
+  const statusCode = error.statusCode || err.status || 500;
+  const canShowMessage = !isProduction || (statusCode < 500 && err.expose === true);
+  return ApiResponse.error(res, canShowMessage ? error.message || 'Internal Server Error' : 'Internal Server Error', isProduction ? null : err.stack, statusCode);
 };
 
 module.exports = errorHandler;

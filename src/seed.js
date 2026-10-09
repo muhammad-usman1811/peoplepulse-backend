@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 const { isTestMongoUri } = require('./utils/testDatabase');
 
 dotenv.config();
+require('./config/env').normalizeEnv();
 
 if (process.env.NODE_ENV === 'production') {
   throw new Error('Seeding is disabled in production');
