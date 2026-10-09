@@ -1,5 +1,78 @@
 # PeoplePulse Integration Bug Tracker
 
+## Audit of the day's work — 2026-10-09 (end of day)
+
+Re-checked this morning's smoke test and this afternoon's Swagger pass. Two further
+production-only defects surfaced, both now fixed, plus corrections to what the
+earlier sections could legitimately claim.
+
+**PROD-4 — Validation messages collapsed to "Internal Server Error" in production — fixed**
+The error handler only ever showed a message in production when the error carried
+`expose` (the http-errors/body-parser convention). `AppError`, which the app's own
+validation helpers throw, does not set it. So every thrown field error answered
+`400` with the body `{"message":"Internal Server Error"}` — a self-contradicting
+response that told the client nothing to correct. Reproduced on three real routes
+(`POST /employees` with an unknown department, and a bad `manager` on both
+`POST /employees` and `PUT /profile`).
+
+This was latent rather than live: PROD-1's BOM meant production never entered
+production mode, so it was still returning the real message — along with a stack
+trace. Fixing the BOM on its own would therefore have **introduced** this bug.
+`errorMiddleware` now treats a sub-500 `AppError` as client-safe, so the `message`
+field Easha's client reads is unchanged by the BOM fix, and only the stack
+disappears. 5xx responses, unlabelled 4xx, and `AppError` raised with a 500 stay
+generic; covered by `test-env-config.js`.
+
+**PROD-5 — The serverless entrypoint read env before normalizing it — fixed**
+`api/index.js` is what Vercel actually invokes, and it requires `src/config/db.js`
+(line 12) before `src/server.js` (line 13), where `normalizeEnv()` lived. `db.js`
+calls `dns.setServers(process.env.DNS_SERVERS || ...)` in its module body, so that
+read saw the raw value. With a BOM on `DNS_SERVERS` the function dies at import with
+`Invalid IP address: ﻿8.8.8.8` — verified both ways. `api/index.js` now
+normalizes first. Every suite below was then re-run **through this entrypoint**
+rather than through `src/server.js`.
+
+### Corrections to the earlier sections
+
+- The morning and afternoon runs exercised `src/server.js`, not the deployed
+  `api/index.js` entrypoint. Both now pass through the entrypoint: the per-role
+  contract is **412 probes, 0 mismatches, 0 skipped**, and the "Try it out"
+  walkthrough is **121 calls, 0 mismatches**.
+- The afternoon figure of "0 of 379" skipped 9 write operations (clock-in/out,
+  profile and notification updates, mark-all-read, onboarding create, both upload
+  routes, forgot-password). Those are now covered by the 412-probe run against the
+  throwaway database. They remain deliberately unexercised against live production,
+  because succeeding there would write real records.
+- Live production still matches the committed spec exactly: **0 mismatches of 97**
+  safe probes.
+- Swagger documents only response descriptions, not response schemas, so "matches
+  production" means status codes, roles, parameters and request examples — not
+  response bodies, which are unverified against the docs because the docs make no
+  claim about them.
+
+### Still open
+
+- **Seed accounts are not confirmed on production.** `POST /api/auth/login` returns
+  an identical `401 Invalid corporate email or password` for a known and an unknown
+  address, so production correctly refuses to leak which accounts exist — which also
+  means existence cannot be established from outside. Confirming them needs either
+  the production `SEED_PASSWORD` (via a gitignored `.env.smoke` holding
+  `PP_SEED_PASSWORD=`) or approval to read the Atlas `peoplepulse` database.
+- **`.env` hygiene checked and clean:** no BOM, whitespace or leftover
+  `replace_with_` placeholder in any of its 13 keys, and `npm run seed` is
+  double-guarded against the Atlas database (`ALLOW_DESTRUCTIVE_SEED=false`, and no
+  `SEED_PASSWORD` set). `BASE_URL` is read only by `src/test_api.js`, which defaults
+  it. Production's own Vercel variables cannot be inspected from here — `NODE_ENV`
+  there is still the one that needs re-typing.
+
+### Deliberately not fixed (already owned elsewhere)
+
+- **`pagination.totalPages` on `/api/audit-logs`** (STG-1): `origin/fix/audit-pagination-pages`
+  already adds `pages` alongside `totalPages`, which is the right additive fix.
+- **Blocked CORS origin returns 500** (STG-2): fixed on
+  `origin/security-backend-hardening-pass`, which also moves CORS into
+  `src/config/cors.js`. Both are left alone so this work does not conflict with them.
+
 ## Swagger vs production — 2026-10-09 (afternoon)
 
 Production serves exactly the same `/api-docs.json` as `main`. Three checks:

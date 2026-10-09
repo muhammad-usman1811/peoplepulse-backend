@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizeEnv } = require('./src/config/env');
 const errorHandler = require('./src/middleware/errorMiddleware');
+const AppError = require('./src/utils/appError');
 
 const response = () => ({
   statusCode: 200,
@@ -61,4 +62,32 @@ test('a BOM-prefixed NODE_ENV still hides stack traces once normalized', (t) => 
   assert.equal(serverError.statusCode, 500);
   assert.equal(serverError.body.message, 'Internal Server Error');
   assert.equal(serverError.body.error, undefined);
+});
+
+test('production keeps AppError validation messages but hides server errors', (t) => {
+  const previous = process.env.NODE_ENV;
+  t.after(() => { process.env.NODE_ENV = previous; });
+  t.mock.method(console, 'error', () => {});
+  process.env.NODE_ENV = 'production';
+
+  const req = { path: '/api/employees', is: () => false };
+
+  // Thrown by validateReference/validateManager so the client can correct the field.
+  const validation = response();
+  errorHandler(new AppError('department does not exist', 400), req, validation);
+  assert.equal(validation.statusCode, 400);
+  assert.equal(validation.body.message, 'department does not exist');
+  assert.equal(validation.body.error, undefined);
+
+  // An AppError that is not a client error must not disclose its message.
+  const internal = response();
+  errorHandler(new AppError('mongodb://user:pass@host/db unreachable', 500), req, internal);
+  assert.equal(internal.statusCode, 500);
+  assert.equal(internal.body.message, 'Internal Server Error');
+
+  // An unlabelled 4xx is not trusted either.
+  const unlabelled = response();
+  errorHandler(Object.assign(new Error('raw internal detail'), { statusCode: 400 }), req, unlabelled);
+  assert.equal(unlabelled.statusCode, 400);
+  assert.equal(unlabelled.body.message, 'Internal Server Error');
 });

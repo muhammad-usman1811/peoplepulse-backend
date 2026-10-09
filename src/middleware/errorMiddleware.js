@@ -50,11 +50,16 @@ const errorHandler = (err, req, res, next) => {
     return ApiResponse.error(res, message, null, 413);
   }
 
-  // Default internal server error. 4xx errors that are safe to show (body-parser
-  // marks them with expose, e.g. malformed JSON) keep their message in production.
+  // Default error response. In production only deliberate client-facing errors keep
+  // their message: AppError, thrown by our own validation helpers, and errors marked
+  // `expose` by http-errors/body-parser such as malformed JSON. Everything else, and
+  // every 5xx, gets a generic message so internals are never disclosed. Without the
+  // AppError case a rejected field came back as "400 Internal Server Error", which
+  // told the client nothing about what to correct.
   const statusCode = error.statusCode || err.status || 500;
-  const canShowMessage = !isProduction || (statusCode < 500 && err.expose === true);
-  return ApiResponse.error(res, canShowMessage ? error.message || 'Internal Server Error' : 'Internal Server Error', isProduction ? null : err.stack, statusCode);
+  const isClientSafe = statusCode < 500 && (err.name === 'AppError' || err.expose === true);
+  const message = !isProduction || isClientSafe ? error.message || 'Internal Server Error' : 'Internal Server Error';
+  return ApiResponse.error(res, message, isProduction ? null : err.stack, statusCode);
 };
 
 module.exports = errorHandler;
