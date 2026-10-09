@@ -86,6 +86,9 @@ const swaggerDocument = {
           401: {
             description: 'Invalid credentials',
           },
+          429: {
+            description: 'Too many login attempts from this IP; 20 per 15 minutes',
+          },
         },
       },
     },
@@ -174,6 +177,7 @@ const swaggerDocument = {
           200: { description: 'Password changed successfully' },
           400: { description: 'Invalid password request' },
           401: { description: 'Current password is incorrect or token is invalid' },
+          429: { description: 'Too many password change attempts; 10 per 15 minutes' },
         },
       },
     },
@@ -1275,6 +1279,9 @@ const swaggerDocument = {
           400: {
             description: 'Email address missing from request body',
           },
+          429: {
+            description: 'Too many reset requests; 20 per 15 minutes per IP, and a further per-address limit',
+          },
         },
       },
     },
@@ -1321,6 +1328,9 @@ const swaggerDocument = {
           400: {
             description: 'Invalid or expired token',
           },
+          429: {
+            description: 'Too many password reset attempts from this IP; 5 per 15 minutes',
+          },
         },
       },
     },
@@ -1346,6 +1356,7 @@ const swaggerDocument = {
         responses: {
           200: { description: 'Password reset successful' },
           400: { description: 'Invalid or expired reset token' },
+          429: { description: 'Too many password reset attempts from this IP; 5 per 15 minutes' },
         },
       },
     },

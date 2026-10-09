@@ -53,6 +53,25 @@ test('every documented Swagger operation is implemented', () => {
   assert.deepEqual(stale, []);
 });
 
+// Each of these mounts an express-rate-limit middleware, so it can answer 429 and
+// the docs have to say so. Surfaced by a probe run that exhausted the reset limiter.
+const RATE_LIMITED = [
+  ['/auth/login', 'post'],
+  ['/auth/forgot-password', 'post'],
+  ['/auth/reset-password', 'post'],
+  ['/auth/reset-password/{resetToken}', 'put'],
+  ['/profile/password', 'put'],
+];
+
+test('every rate-limited operation documents 429', () => {
+  const missing = RATE_LIMITED.filter(([path, method]) => {
+    const operation = swaggerDocument.paths[path]?.[method];
+    assert.ok(operation, `${method.toUpperCase()} ${path} is missing from the spec entirely`);
+    return !operation.responses?.[429];
+  }).map(([path, method]) => `${method.toUpperCase()} ${path}`);
+  assert.deepEqual(missing, []);
+});
+
 test('every secured operation documents 401', () => {
   const missing = [];
   for (const [path, operations] of Object.entries(swaggerDocument.paths)) {

@@ -3,6 +3,7 @@ const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
 const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
+const { resolveResetBaseUrl } = require('../utils/resetBaseUrl');
 const recordAudit = require('../utils/recordAudit');
 
 /**
@@ -220,17 +221,7 @@ exports.forgotPassword = async (req, res, next) => {
       return ApiResponse.success(res, genericMessage);
     }
 
-    const configuredFrontendUrl = process.env.FRONTEND_URL || process.env.APP_URL;
-    const frontendUrl = configuredFrontendUrl || (
-      process.env.NODE_ENV === 'production' ? '' : `${req.protocol}://${req.get('host')}`
-    );
-    let resetBaseUrl = '';
-    try {
-      const parsedUrl = new URL(frontendUrl);
-      if (['http:', 'https:'].includes(parsedUrl.protocol)) resetBaseUrl = parsedUrl.href.replace(/\/$/, '');
-    } catch {
-      resetBaseUrl = '';
-    }
+    const resetBaseUrl = resolveResetBaseUrl(process.env, `${req.protocol}://${req.get('host')}`);
 
     if (!isEmailConfigured() || !resetBaseUrl) {
       console.error('[Email] Password reset unavailable because email or frontend URL configuration is missing.');

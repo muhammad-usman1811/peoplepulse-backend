@@ -1,5 +1,67 @@
 # PeoplePulse Integration Bug Tracker
 
+## Review follow-up — 2026-10-09 (late)
+
+**PROD-6 — Password reset would silently stop sending once production mode worked — fixed**
+`forgotPassword` built its reset link from `FRONTEND_URL || APP_URL`, falling back to the
+request's own origin — but only outside production. In production the fallback was the
+empty string, so with neither variable set on Vercel the link had no base, the handler
+took its "configuration is missing" branch, and the caller still received the generic
+`If an account exists ... a password reset link has been dispatched.` No email, no
+token, no error: password reset simply stopped working, visibly to nobody.
+
+Like PROD-4 this was latent, because PROD-1's BOM kept production out of production
+mode — so the request-origin fallback was still being used and reset links worked.
+Fixing the BOM alone would have broken the flow.
+
+Reproduced faithfully first: the entrypoint run from a directory with no `.env`, so
+`dotenv` finds nothing exactly as on Vercel. An earlier attempt looked like it passed
+only because `dotenv` had quietly loaded `FRONTEND_URL` from the local gitignored
+`.env`, which is never deployed — the log line gave that away.
+
+Refusing the request origin in production is correct, not a bug: a forged `Host` header
+would otherwise put an attacker's domain into a reset link emailed to the real account
+owner. So the fix keeps that refusal and adds the platform's own deployment URL
+(`VERCEL_PROJECT_PRODUCTION_URL`, then `VERCEL_URL`) as the fallback — the same
+platform-supplied value `src/server.js` already trusts for CORS, and one no request can
+influence. The API serves `reset-password.html` itself, so its own origin is a working
+destination (verified `200` on production).
+
+Now in `src/utils/resetBaseUrl.js` so it is unit-testable, with
+`warnIfResetLinksUnavailable()` logging once per cold start when production cannot send
+reset links at all — the misconfiguration is now visible in the deployment's own logs
+instead of only as users never receiving email.
+
+Verified end to end through `api/index.js`, with a local SMTP sink capturing the message:
+with the platform URL present the email contains
+`https://peoplepulse-backend.vercel.app/reset-password.html?token=...` **even when the
+request carries `Host: attacker.example`**, and the reset token is persisted (it is
+cleared on delivery failure, so persistence proves the send succeeded). With nothing
+configured it still refuses to build a link and logs the startup warning.
+
+**DOC-1 — 429 was undocumented on all five rate-limited routes — fixed**
+Surfaced by accident when a probe run exhausted the 5-per-15-minute reset limiter: the
+morning run had used these endpoints too sparingly to ever trip them. `POST /auth/login`
+(20/15min), `POST /auth/forgot-password` (20/15min per IP plus a per-address limit),
+`POST /auth/reset-password` and `PUT /auth/reset-password/{resetToken}` (5/15min), and
+`PUT /profile/password` (10/15min) can all answer 429, and none said so.
+`test-swagger-coverage.js` now fails if any of them stops documenting it.
+
+### Verification tooling note
+
+`contract.js` decided whether to skip write-capable probes from the *label* passed on
+the command line. A run labelled `prod-final2` therefore sent those 9 operations at the
+live deployment. Nothing was written — all probes were tokenless, so the result was
+101×401, 4×400 (forgot-password included, rejected at validation before any email) and
+one 200 from `GET /api/health` — but the guard was wrong in principle and now derives
+from the target host instead, so a mislabelled run cannot aim writes at production.
+
+### Totals after this round
+
+Unit tests 244/244. Through `api/index.js`: contract 412 probes / 0 mismatches / 0
+skipped, Try-it-out 121 calls / 0 mismatches, leak probe 0 leaks. Live production
+0 mismatches of 97 safe probes. A two-minute sprint summary is in `SPRINT_SUMMARY.md`.
+
 ## Audit of the day's work — 2026-10-09 (end of day)
 
 Re-checked this morning's smoke test and this afternoon's Swagger pass. Two further

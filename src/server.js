@@ -32,8 +32,10 @@ const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./config/swagger');
 const { validateSecurityConfig } = require('./config/security');
+const { warnIfResetLinksUnavailable } = require('./utils/resetBaseUrl');
 
 validateSecurityConfig();
+warnIfResetLinksUnavailable();
 
 // Initialize MongoDB connection
 connectDB();
