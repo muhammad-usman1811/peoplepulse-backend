@@ -1,10 +1,18 @@
 const validator = require('validator');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { hashToken } = require('../utils/cryptoUtils');
 const { isEmailConfigured, sendResetPasswordEmail } = require('../utils/sendEmail');
 const { resolveResetBaseUrl } = require('../utils/resetBaseUrl');
 const recordAudit = require('../utils/recordAudit');
+
+// Hash of a random, discarded value at the same cost as User's pre-save hook (12).
+// Login compares against it when no account matches, so an unknown email takes as
+// long as a wrong password - otherwise the ~300ms bcrypt gap reveals which work
+// emails have accounts, despite both answering with the same 401 message.
+// Precomputed so serverless cold starts don't pay for an extra hash.
+const DUMMY_PASSWORD_HASH = '$2a$12$04rn5RhrOjvtBbMus6pbsusW5bEN57K/cwze1pFdx4xd2lLt2STv2';
 
 /**
  * @desc    Register a new user
@@ -123,6 +131,7 @@ exports.login = async (req, res, next) => {
     const user = await User.findOne({ email: identifier.toLowerCase().trim() }).select('+password');
 
     if (!user) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       return ApiResponse.error(
         res,
         'Invalid corporate email or password',
