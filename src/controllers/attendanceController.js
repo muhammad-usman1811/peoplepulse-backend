@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const { decrypt } = require('../utils/cryptoUtils');
 const { DateTime } = require('luxon');
 const Attendance = require('../models/Attendance');
 const User = require('../models/User');
@@ -193,31 +193,66 @@ exports.getTeamAttendance = async (req, res, next) => {
 
 exports.getAttendance = async (req, res, next) => {
   try {
-    const filters = parseAttendanceFilters(req.query);
-    if (filters.error) return ApiResponse.error(res, filters.error, null, 400);
-
-    const query = {};
-    if (filters.date) query.date = filters.date;
-
-    if (req.query.employeeId !== undefined) {
-      if (typeof req.query.employeeId !== 'string' || !req.query.employeeId.trim()) {
-        return ApiResponse.error(res, 'employeeId must be a valid employee ID', null, 400);
+    const { date, page = '1', limit = '10' } = req.query;
+    for (const [key, value, max] of [['page', page, Number.MAX_SAFE_INTEGER], ['limit', limit, 50]]) {
+      if (typeof value !== 'string' || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1 || Number(value) > max) {
+        return ApiResponse.error(res, `${key} must be an integer between 1 and ${max}`, null, 400);
       }
-
-      const employee = mongoose.isValidObjectId(req.query.employeeId)
-        ? await User.findById(req.query.employeeId).select('_id')
-        : await User.findOne({ employeeId: req.query.employeeId.trim() }).select('_id');
-
-      if (!employee) return ApiResponse.error(res, 'Employee not found', null, 404);
-      query.employee = employee._id;
     }
-
-    const attendance = await Attendance.find(query)
-      .sort({ date: -1 })
-      .limit(filters.limit)
-      .populate('employee', 'name email employeeId role');
-
-    return ApiResponse.success(res, 'Attendance records retrieved successfully.', { attendance });
+    const offset = (Number(page) - 1) * Number(limit);
+    if (!Number.isSafeInteger(offset)) return ApiResponse.error(res, 'page is too large', null, 400);
+    const today = DateTime.now().setZone(APP_TIMEZONE).startOf('day');
+    let day;
+    if (date !== undefined) {
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return ApiResponse.error(res, 'date must use YYYY-MM-DD format', null, 400);
+      }
+      day = DateTime.fromFormat(date, 'yyyy-MM-dd', { zone: APP_TIMEZONE });
+      if (!day.isValid || day.toFormat('yyyy-MM-dd') !== date || day > today) {
+        return ApiResponse.error(res, 'date must be a valid YYYY-MM-DD date and not in the future', null, 400);
+      }
+    } else {
+      const latest = await Attendance.findOne({ date: { $lt: today.plus({ days: 1 }).toJSDate() } })
+        .sort({ date: -1, _id: -1 }).select('date').lean();
+      if (latest) day = DateTime.fromJSDate(latest.date).setZone(APP_TIMEZONE).startOf('day');
+    }
+    const pagination = { page: Number(page), limit: Number(limit), totalRecords: 0, totalPages: 0 };
+    if (!day) return ApiResponse.success(res, 'Attendance fetched successfully', { date: null, records: [], pagination });
+    const filter = { date: { $gte: day.startOf('day').toJSDate(), $lt: day.plus({ days: 1 }).startOf('day').toJSDate() } };
+    const totalRecords = await Attendance.countDocuments(filter);
+    let records = [];
+    if (totalRecords && offset < totalRecords) {
+      // Names are encrypted at rest: resolve name order, then paginate attendance in MongoDB.
+      const employeeIds = await Attendance.distinct('employee', filter);
+      const employees = await User.find({ _id: { $in: employeeIds } }).select('_id name').lean();
+      const names = employees.map(employee => ({ ...employee, name: decrypt(employee.name) || '' }));
+      const orderedIds = names.sort((a, b) => a.name.localeCompare(b.name, 'en') || String(a._id).localeCompare(String(b._id))).map(employee => employee._id);
+      const slice = await Attendance.aggregate([
+        { $match: filter },
+        { $set: { employeeOrder: { $indexOfArray: [orderedIds, '$employee'] } } },
+        { $sort: { employeeOrder: 1, _id: 1 } },
+        { $skip: offset },
+        { $limit: Number(limit) },
+        { $project: { _id: 1 } },
+      ]);
+      const attendance = await Attendance.find({ _id: { $in: slice.map(row => row._id) } })
+        .select('employee clockIn clockOut status').populate('employee', 'name department employeeId').lean();
+      const byId = new Map(attendance.map(row => [String(row._id), row]));
+      const time = value => value ? DateTime.fromJSDate(value).setZone(APP_TIMEZONE).toFormat('HH:mm') : null;
+      records = slice.map(({ _id }) => {
+        const row = byId.get(String(_id));
+        return {
+          employeeId: row.employee?.employeeId || row.employee?._id || null,
+          name: decrypt(row.employee?.name) || '',
+          department: row.employee?.department || '',
+          checkIn: time(row.clockIn), checkOut: time(row.clockOut), status: row.status,
+        };
+      });
+    }
+    return ApiResponse.success(res, 'Attendance fetched successfully', {
+      date: day.toFormat('yyyy-MM-dd'), records,
+      pagination: { ...pagination, totalRecords, totalPages: Math.ceil(totalRecords / Number(limit)) },
+    });
   } catch (err) {
     next(err);
   }

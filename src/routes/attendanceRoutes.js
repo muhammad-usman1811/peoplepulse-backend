@@ -16,6 +16,6 @@ router.post('/clock-in', clockIn);
 router.post('/clock-out', clockOut);
 router.get('/me', getMyAttendance);
 router.get('/team', getTeamAttendance);
-router.get('/', authorize('superadmin', 'admin', 'hr'), getAttendance);
+router.get('/', authorize('hr'), getAttendance);
 
 module.exports = router;
