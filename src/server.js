@@ -13,6 +13,7 @@ const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const orgRoutes = require('./routes/orgRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const hrAttendanceRoutes = require('./routes/hrAttendanceRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const { leaveRoutes, wfhRoutes } = require('./routes/requestRoutes');
@@ -166,6 +167,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/org', orgRoutes);
 app.use('/api/attendance', attendanceRoutes);
+// HR Attendance List: HR-only, paginated, one day at a time
+app.use('/api/v1/attendance', hrAttendanceRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/leave-requests', leaveRoutes);

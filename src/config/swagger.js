@@ -618,6 +618,160 @@ const swaggerDocument = {
         },
       },
     },
+    '/v1/attendance': {
+      get: {
+        summary: 'HR Attendance List',
+        description:
+          'Lists every employee attendance record for one calendar day so HR can review who was present, late, on a half day, or absent. '
+          + 'When `date` is omitted the most recent day that has attendance records (never after today) is used, and the chosen day is returned as `data.date`; '
+          + 'if no attendance exists at all, `data.date` is null and `records` is empty. Dates use APP_TIMEZONE (default Asia/Karachi). '
+          + 'Records are ordered by clock-in time, then record ID, so pages never overlap. '
+          + 'Each record exposes only the employee ID, name, department, and designation; contact, salary, and account details are never returned.\n\n'
+          + '**Authentication:** Bearer JWT required.\n\n**Access:** HR role only. Every other role (employee, finance, admin, superadmin) receives 403.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            in: 'query',
+            name: 'date',
+            required: false,
+            schema: { type: 'string', format: 'date', pattern: '^\\d{4}-\\d{2}-\\d{2}$', example: '2026-10-23' },
+            description: 'Calendar day to list (YYYY-MM-DD). Must be a real date and not in the future. Defaults to the latest day with attendance records.',
+          },
+          {
+            in: 'query',
+            name: 'page',
+            required: false,
+            schema: { type: 'integer', minimum: 1, default: 1 },
+            description: 'Page number (minimum 1)',
+          },
+          {
+            in: 'query',
+            name: 'limit',
+            required: false,
+            schema: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
+            description: 'Records per page (1-50)',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Attendance records for the selected day, with pagination metadata. An empty `records` array means nobody has attendance on that day (or on this page).',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Attendance records retrieved successfully.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        date: { type: 'string', format: 'date', nullable: true, description: 'The day listed; null when no attendance exists yet', example: '2026-10-23' },
+                        records: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', description: 'Attendance record ID' },
+                              employee: {
+                                type: 'object',
+                                nullable: true,
+                                description: 'null if the employee account no longer exists',
+                                properties: {
+                                  id: { type: 'string', description: 'User ID' },
+                                  employeeId: { type: 'string', nullable: true, example: 'EMP-1001' },
+                                  name: { type: 'string', example: 'Ayesha Khan' },
+                                  department: { type: 'string', example: 'Engineering' },
+                                  designation: { type: 'string', example: 'Software Engineer' },
+                                },
+                              },
+                              date: { type: 'string', format: 'date', example: '2026-10-23' },
+                              clockIn: { type: 'string', format: 'date-time', nullable: true },
+                              clockOut: { type: 'string', format: 'date-time', nullable: true },
+                              status: { type: 'string', enum: ['present', 'late', 'half-day', 'absent'] },
+                              isLate: { type: 'boolean' },
+                              isHalfDay: { type: 'boolean' },
+                            },
+                          },
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            page: { type: 'integer', example: 1 },
+                            limit: { type: 'integer', example: 10 },
+                            totalRecords: { type: 'integer', example: 2 },
+                            totalPages: { type: 'integer', example: 1 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                example: {
+                  success: true,
+                  message: 'Attendance records retrieved successfully.',
+                  data: {
+                    date: '2026-10-23',
+                    records: [
+                      {
+                        id: '6718a0000000000000000101',
+                        employee: { id: '66f000000000000000000011', employeeId: 'EMP-1001', name: 'Ayesha Khan', department: 'Engineering', designation: 'Software Engineer' },
+                        date: '2026-10-23',
+                        clockIn: '2026-10-23T03:52:00.000Z',
+                        clockOut: '2026-10-23T12:05:00.000Z',
+                        status: 'present',
+                        isLate: false,
+                        isHalfDay: false,
+                      },
+                      {
+                        id: '6718a0000000000000000102',
+                        employee: { id: '66f000000000000000000012', employeeId: 'EMP-1002', name: 'Bilal Ahmed', department: 'Finance', designation: 'Accountant' },
+                        date: '2026-10-23',
+                        clockIn: '2026-10-23T04:20:00.000Z',
+                        clockOut: null,
+                        status: 'late',
+                        isLate: true,
+                        isHalfDay: false,
+                      },
+                    ],
+                    pagination: { page: 1, limit: 10, totalRecords: 2, totalPages: 1 },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Invalid query parameter. The message names the parameter and the rule it broke.',
+            content: {
+              'application/json': {
+                examples: {
+                  invalidDate: { summary: 'Malformed or impossible date', value: { success: false, message: 'date must be a valid calendar date in YYYY-MM-DD format' } },
+                  futureDate: { summary: 'Date after today', value: { success: false, message: 'date cannot be in the future' } },
+                  invalidPage: { summary: 'page below 1 or not an integer', value: { success: false, message: 'page must be a positive integer (minimum 1)' } },
+                  invalidLimit: { summary: 'limit outside 1-50 or not an integer', value: { success: false, message: 'limit must be an integer between 1 and 50' } },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized - Invalid or missing token',
+            content: {
+              'application/json': {
+                example: { success: false, message: 'Access denied. No authentication token provided.' },
+              },
+            },
+          },
+          403: {
+            description: 'Forbidden - only the HR role can view the attendance list',
+            content: {
+              'application/json': {
+                example: { success: false, message: "User role 'employee' is not authorized to access this resource" },
+              },
+            },
+          },
+        },
+      },
+    },
     '/payroll/salary-structure': {
       get: {
         summary: 'List Salary Structures',

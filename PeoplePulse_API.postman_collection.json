@@ -453,10 +453,24 @@
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
         "url": {
-          "raw": "{{baseUrl}}/v1/attendance?employeeId=REPLACE_WITH_EMPLOYEE_ID&from=2026-09-01&to=2026-09-30&limit=30",
+          "raw": "{{baseUrl}}/attendance?employeeId=REPLACE_WITH_EMPLOYEE_ID&from=2026-09-01&to=2026-09-30&limit=30",
+          "host": ["{{baseUrl}}"],
+          "path": ["attendance"],
+          "query": [{ "key": "employeeId", "value": "REPLACE_WITH_EMPLOYEE_ID" }, { "key": "from", "value": "2026-09-01" }, { "key": "to", "value": "2026-09-30" }, { "key": "limit", "value": "30" }]
+        }
+      }
+    },
+    {
+      "name": "24b. HR Attendance List (HR only)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+        "description": "Paginated attendance for one day. Omit date to get the latest day with attendance. HR role only; other roles get 403.",
+        "url": {
+          "raw": "{{baseUrl}}/v1/attendance?date=2026-09-30&page=1&limit=10",
           "host": ["{{baseUrl}}"],
           "path": ["v1", "attendance"],
-          "query": [{ "key": "employeeId", "value": "REPLACE_WITH_EMPLOYEE_ID" }, { "key": "from", "value": "2026-09-01" }, { "key": "to", "value": "2026-09-30" }, { "key": "limit", "value": "30" }]
+          "query": [{ "key": "date", "value": "2026-09-30" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }]
         }
       }
     },
