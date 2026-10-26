@@ -7,6 +7,8 @@ const path = require('path');
 
 // Load environment variables
 dotenv.config();
+// Must run before anything below reads NODE_ENV/APP_TIMEZONE/CLIENT_URL
+require('./config/env').normalizeEnv();
 
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
@@ -31,8 +33,10 @@ const ApiResponse = require('./utils/apiResponse');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./config/swagger');
 const { validateSecurityConfig } = require('./config/security');
+const { warnIfResetLinksUnavailable } = require('./utils/resetBaseUrl');
 
 validateSecurityConfig();
+warnIfResetLinksUnavailable();
 
 // Initialize MongoDB connection
 connectDB();

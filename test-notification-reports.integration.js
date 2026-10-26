@@ -129,7 +129,7 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
 
     const uploadedDocument = await uploadRequest(
       baseUrl,
-      '/documents/upload',
+      '/employee-documents/upload',
       employeeToken,
       'certificate',
       'test-certificate.pdf',
@@ -141,18 +141,18 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
     assert.ok(storedDocument, 'uploaded document should persist in MongoDB');
     assert.equal(storedDocument.fileData.toString(), '%PDF-1.4\nIntegration test file');
 
-    const listedDocuments = await request(baseUrl, '/documents/me', employeeToken);
+    const listedDocuments = await request(baseUrl, '/employee-documents/me', employeeToken);
     assert.equal(listedDocuments.status, 200);
     assert.equal(listedDocuments.data.data.documents.length, 1);
     assert.equal(listedDocuments.data.data.documents[0].originalName, 'test-certificate.pdf');
     assert.equal(listedDocuments.data.data.documents[0].category, 'certificate');
     assert.equal(listedDocuments.data.data.documents[0].fileData, undefined);
-    const foreignDocuments = await request(baseUrl, '/documents/me', otherEmployeeToken);
+    const foreignDocuments = await request(baseUrl, '/employee-documents/me', otherEmployeeToken);
     assert.equal(foreignDocuments.data.data.documents.length, 0);
 
     const invalidUpload = await uploadRequest(
       baseUrl,
-      '/documents/upload',
+      '/employee-documents/upload',
       employeeToken,
       'other',
       'not-a-pdf.pdf',
@@ -162,7 +162,7 @@ test('notification and report APIs persist and aggregate isolated MongoDB test d
     assert.equal(invalidUpload.status, 400);
     const oversizedUpload = await uploadRequest(
       baseUrl,
-      '/documents/upload',
+      '/employee-documents/upload',
       employeeToken,
       'other',
       'oversized.pdf',

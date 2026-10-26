@@ -300,6 +300,25 @@ test('new password succeeds at login while the old password is rejected', async 
   assert.equal(newPasswordRes.body.data.token, 'fresh-session-token');
 });
 
+test('login runs a full-cost bcrypt compare for unknown emails so timing does not reveal accounts', async (t) => {
+  const compared = [];
+  const originalCompare = bcrypt.compare;
+  bcrypt.compare = async (password, hash) => { compared.push({ password, hash }); return false; };
+  t.after(() => { bcrypt.compare = originalCompare; });
+  User.findOne = () => ({ select: async () => null });
+
+  const res = await runController(authController.login, request({
+    email: 'unknown@example.test',
+    password: 'WrongPassword123',
+  }));
+
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.message, 'Invalid corporate email or password');
+  assert.equal(compared.length, 1);
+  assert.equal(compared[0].password, 'WrongPassword123');
+  assert.match(compared[0].hash, /^\$2[aby]\$12\$/);
+});
+
 test('forgot-password per-email limiter blocks repeated requests', async () => {
   const req = {
     ip: '198.51.100.8',
