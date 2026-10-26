@@ -197,6 +197,7 @@ Employee `User.location` is currently stored as a canonical `Location.name` stri
 - **GET** `/attendance/me?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30`
 - **GET** `/attendance/team?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (direct reports)
 - **GET** `/attendance?employeeId=<id>&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (Admin/HR, all employees)
+- **GET** `/v1/attendance?date=YYYY-MM-DD&page=1&limit=10` (HR only): HR Attendance List for one day. `date` defaults to the latest day with attendance and cannot be in the future; `limit` is 1-50. Returns `date`, `records` (employee ID, name, department, designation plus clock-in/out and status only), and `pagination` (`page`, `limit`, `totalRecords`, `totalPages`).
 
 Attendance timestamps are stored in UTC. Calendar dates and the 9:00 AM late threshold use `APP_TIMEZONE` (default `Asia/Karachi`).
 
