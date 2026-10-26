@@ -86,6 +86,9 @@ const swaggerDocument = {
           401: {
             description: 'Invalid credentials',
           },
+          429: {
+            description: 'Too many login attempts from this IP; 20 per 15 minutes',
+          },
         },
       },
     },
@@ -128,13 +131,14 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
+                example: { name: 'Ayesha Khan', phoneNumber: '+92 300 1234567' },
                 properties: {
                   name: { type: 'string', example: 'Ayesha Khan' },
                   phoneNumber: { type: 'string', example: '+92 300 1234567' },
-                  employeeId: { type: 'string', example: 'EMP-1042' },
-                  department: { type: 'string', example: 'Product Design' },
-                  designation: { type: 'string', example: 'UX/UI Designer' },
-                  manager: { type: 'string', nullable: true, example: '664fa1b234567890abcdef12' },
+                  employeeId: { type: 'string', description: 'Admin roles only' },
+                  department: { type: 'string', description: 'Admin roles only' },
+                  designation: { type: 'string', description: 'Admin roles only' },
+                  manager: { type: 'string', nullable: true, description: 'Admin roles only; manager user ID' },
                 },
               },
             },
@@ -144,7 +148,7 @@ const swaggerDocument = {
           200: { description: 'Profile updated successfully' },
           400: { description: 'Invalid profile data' },
           401: { description: 'Unauthorized - Invalid or missing token' },
-          403: { description: 'Insufficient permissions' },
+          403: { description: 'A non-admin user sent employeeId, department, designation, or manager' },
           409: { description: 'Employee ID already exists' },
         },
       },
@@ -173,6 +177,7 @@ const swaggerDocument = {
           200: { description: 'Password changed successfully' },
           400: { description: 'Invalid password request' },
           401: { description: 'Current password is incorrect or token is invalid' },
+          429: { description: 'Too many password change attempts; 10 per 15 minutes' },
         },
       },
     },
@@ -278,7 +283,7 @@ const swaggerDocument = {
                 required: ['name'],
                 properties: {
                   name: { type: 'string', example: 'Product Design' },
-                  location: { type: 'string', example: 'Lahore', nullable: true },
+                  location: { type: 'string', nullable: true, description: 'Location ID from GET /org/locations' },
                 },
               },
             },
@@ -286,7 +291,7 @@ const swaggerDocument = {
         },
         responses: {
           201: { description: 'Department created successfully' },
-          400: { description: 'Name is required' },
+          400: { description: 'Name is required or location is not a valid location ID' },
           401: { description: 'Unauthorized - Invalid or missing token' },
           403: { description: 'Only admin, HR, or superadmin can create departments' },
           409: { description: 'Department name already exists' },
@@ -319,7 +324,7 @@ const swaggerDocument = {
                 required: ['name'],
                 properties: {
                   name: { type: 'string', example: 'Product Design' },
-                  location: { type: 'string', example: 'Lahore', nullable: true },
+                  location: { type: 'string', nullable: true, description: 'Location ID from GET /org/locations' },
                 },
               },
             },
@@ -701,8 +706,8 @@ const swaggerDocument = {
               schema: {
                 type: 'object', required: ['name', 'email', 'password'],
                 properties: {
-                  name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email' },
-                  password: { type: 'string', minLength: 6, maxLength: 72 }, employeeId: { type: 'string', maxLength: 64 },
+                  name: { type: 'string', example: 'Jane Doe' }, email: { type: 'string', format: 'email', example: 'jane.doe@peoplepulse.com' },
+                  password: { type: 'string', minLength: 6, maxLength: 72, example: 'TempPassword123' }, employeeId: { type: 'string', maxLength: 64 },
                   phoneNumber: { type: 'string', maxLength: 30, example: '+92 300 1234567' },
                   department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
                   manager: { type: 'string', nullable: true },
@@ -727,7 +732,7 @@ const swaggerDocument = {
       get: {
         summary: 'Get Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Employee retrieved successfully' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' } },
+        responses: { 200: { description: 'Employee retrieved successfully' }, 401: { description: 'Authentication required' }, 403: { description: 'HR/Admin role required' }, 404: { description: 'Employee not found' } },
       },
       put: {
         summary: 'Update Employee', tags: ['Employees'], security: [{ BearerAuth: [] }],
@@ -736,7 +741,7 @@ const swaggerDocument = {
           required: true, content: {
             'application/json': {
               schema: {
-                type: 'object', properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, salaryStructure: { type: 'string', nullable: true }, monthlySalary: { type: 'number', nullable: true }, isActive: { type: 'boolean' } },
+                type: 'object', example: { phoneNumber: '+92 300 7654321', status: 'active' }, properties: { name: { type: 'string' }, phoneNumber: { type: 'string', maxLength: 30 }, employeeId: { type: 'string', maxLength: 64, nullable: true }, department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' }, status: { type: 'string', enum: ['active', 'on-leave'] }, manager: { type: 'string', nullable: true }, salaryStructure: { type: 'string', nullable: true }, monthlySalary: { type: 'number', nullable: true }, isActive: { type: 'boolean' } },
               }
             }
           }
@@ -761,17 +766,18 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['type', 'startDate', 'endDate'],
+                example: { type: 'annual', startDate: '2026-10-20', endDate: '2026-10-21', reason: 'Family event' },
                 properties: {
                   type: { type: 'string', enum: ['annual', 'sick', 'casual', 'unpaid'] },
                   startDate: { type: 'string', format: 'date' },
                   endDate: { type: 'string', format: 'date' },
-                  reason: { type: 'string' },
+                  reason: { type: 'string', maxLength: 500 },
                 },
               },
             },
           },
         },
-        responses: { 201: { description: 'Leave request submitted' }, 400: { description: 'Invalid request' }, 409: { description: 'Overlapping request' } },
+        responses: { 201: { description: 'Leave request submitted' }, 400: { description: 'Invalid request, or the employee has no active assigned manager' }, 401: { description: 'Authentication required' }, 403: { description: 'Only the employee role can submit requests' }, 409: { description: 'Overlapping request' } },
       },
     },
     '/leave-requests/my': {
@@ -779,7 +785,7 @@ const swaggerDocument = {
         summary: 'List My Leave Requests',
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
-        responses: { 200: { description: 'Leave requests retrieved' } },
+        responses: { 200: { description: 'Leave requests retrieved' }, 401: { description: 'Authentication required' } },
       },
     },
     '/leave-requests/{id}/approve': {
@@ -789,7 +795,8 @@ const swaggerDocument = {
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Leave request approved' }, 404: { description: 'Pending request not found' } },
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { note: { type: 'string', maxLength: 500, description: 'Optional decision note shown to the employee' } } } } } },
+        responses: { 200: { description: 'Leave request approved' }, 400: { description: 'note must be a string of 500 characters or fewer' }, 401: { description: 'Authentication required' }, 404: { description: 'Pending request not found for this approver (only the assigned manager can decide)' } },
       },
     },
     '/leave-requests/{id}/reject': {
@@ -799,7 +806,8 @@ const swaggerDocument = {
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Leave request rejected' }, 404: { description: 'Pending request not found' } },
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { note: { type: 'string', maxLength: 500, description: 'Optional decision note shown to the employee' } } } } } },
+        responses: { 200: { description: 'Leave request rejected' }, 400: { description: 'note must be a string of 500 characters or fewer' }, 401: { description: 'Authentication required' }, 404: { description: 'Pending request not found for this approver (only the assigned manager can decide)' } },
       },
     },
     '/wfh-requests': {
@@ -814,16 +822,17 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['startDate', 'endDate'],
+                example: { startDate: '2026-10-20', endDate: '2026-10-21', reason: 'Internet installation at home' },
                 properties: {
                   startDate: { type: 'string', format: 'date' },
                   endDate: { type: 'string', format: 'date' },
-                  reason: { type: 'string' },
+                  reason: { type: 'string', maxLength: 500 },
                 },
               },
             },
           },
         },
-        responses: { 201: { description: 'WFH request submitted' }, 400: { description: 'Invalid request' }, 409: { description: 'Overlapping request' } },
+        responses: { 201: { description: 'WFH request submitted' }, 400: { description: 'Invalid request, or the employee has no active assigned manager' }, 401: { description: 'Authentication required' }, 403: { description: 'Only the employee role can submit requests' }, 409: { description: 'Overlapping request' } },
       },
     },
     '/wfh-requests/my': {
@@ -831,7 +840,7 @@ const swaggerDocument = {
         summary: 'List My WFH Requests',
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
-        responses: { 200: { description: 'WFH requests retrieved' } },
+        responses: { 200: { description: 'WFH requests retrieved' }, 401: { description: 'Authentication required' } },
       },
     },
     '/wfh-requests/{id}/approve': {
@@ -841,7 +850,8 @@ const swaggerDocument = {
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'WFH request approved' }, 404: { description: 'Pending request not found' } },
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { note: { type: 'string', maxLength: 500, description: 'Optional decision note shown to the employee' } } } } } },
+        responses: { 200: { description: 'WFH request approved' }, 400: { description: 'note must be a string of 500 characters or fewer' }, 401: { description: 'Authentication required' }, 404: { description: 'Pending request not found for this approver (only the assigned manager can decide)' } },
       },
     },
     '/wfh-requests/{id}/reject': {
@@ -851,7 +861,8 @@ const swaggerDocument = {
         tags: ['Leave and WFH'],
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'WFH request rejected' }, 404: { description: 'Pending request not found' } },
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { note: { type: 'string', maxLength: 500, description: 'Optional decision note shown to the employee' } } } } } },
+        responses: { 200: { description: 'WFH request rejected' }, 400: { description: 'note must be a string of 500 characters or fewer' }, 401: { description: 'Authentication required' }, 404: { description: 'Pending request not found for this approver (only the assigned manager can decide)' } },
       },
     },
     '/performance/cycles': {
@@ -888,7 +899,7 @@ const swaggerDocument = {
             },
           },
         },
-        responses: { 201: { description: 'Performance cycle created' }, 403: { description: 'HR/Admin role required' }, 409: { description: 'Period already exists' } },
+        responses: { 201: { description: 'Performance cycle created' }, 400: { description: 'period is required, or status/dates are invalid' }, 401: { description: 'Authentication required' }, 403: { description: 'HR/Admin role required' }, 409: { description: 'Period already exists' } },
       },
     },
     '/performance/cycles/{cycleId}/close': {
@@ -937,6 +948,7 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['selfReview', 'rating'],
+                example: { selfReview: 'Shipped the mobile release and mentored two new joiners.', rating: 4 },
                 properties: {
                   selfReview: { type: 'string' },
                   rating: { type: 'integer', minimum: 1, maximum: 5 },
@@ -973,7 +985,7 @@ const swaggerDocument = {
             },
           },
         },
-        responses: { 201: { description: 'Self-review submitted' }, 400: { description: 'Invalid review or rating' }, 404: { description: 'Open cycle not found' }, 409: { description: 'Review already submitted' } },
+        responses: { 201: { description: 'Self-review submitted' }, 400: { description: 'Invalid review or rating' }, 401: { description: 'Authentication required' }, 403: { description: 'Only the employee role can submit a self-review' }, 404: { description: 'Open cycle not found' }, 409: { description: 'Review already submitted' } },
       },
     },
     '/performance/team': {
@@ -1095,6 +1107,8 @@ const swaggerDocument = {
         responses: {
           200: { description: 'Paginated job postings retrieved successfully' },
           400: { description: 'Invalid pagination parameters' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
         },
       },
       post: {
@@ -1140,6 +1154,8 @@ const swaggerDocument = {
         responses: {
           200: { description: 'Paginated filtered candidates retrieved successfully' },
           400: { description: 'Invalid pagination or filters' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
         },
       },
       post: {
@@ -1157,7 +1173,7 @@ const swaggerDocument = {
                 properties: {
                   name: { type: 'string', minLength: 1, maxLength: 120, example: 'Alex Candidate' },
                   email: { type: 'string', format: 'email', maxLength: 254, example: 'alex@example.com' },
-                  jobPosting: { type: 'string', description: 'ID returned by POST /recruitment/job-postings' },
+                  jobPosting: { type: 'string', description: 'ID returned by POST /recruitment/job-postings', example: '66f000000000000000000001' },
                 },
               },
             },
@@ -1181,6 +1197,8 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'jobPostingId', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Job posting retrieved successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
           404: { description: 'Job posting not found' },
         },
       },
@@ -1193,8 +1211,9 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Candidate retrieved successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
           404: { description: 'Candidate not found' },
-          409: { description: 'Invalid recruitment stage transition' },
         },
       },
     },
@@ -1212,6 +1231,7 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['stage'],
+                example: { stage: 'Screening' },
                 properties: {
                   stage: { type: 'string', enum: ['Applied', 'Screening', 'Interview', 'Offer', 'Hired'] },
                 },
@@ -1259,6 +1279,9 @@ const swaggerDocument = {
           400: {
             description: 'Email address missing from request body',
           },
+          429: {
+            description: 'Too many reset requests; 20 per 15 minutes per IP, and a further per-address limit',
+          },
         },
       },
     },
@@ -1305,6 +1328,9 @@ const swaggerDocument = {
           400: {
             description: 'Invalid or expired token',
           },
+          429: {
+            description: 'Too many password reset attempts from this IP; 5 per 15 minutes',
+          },
         },
       },
     },
@@ -1320,7 +1346,7 @@ const swaggerDocument = {
                 type: 'object',
                 required: ['token', 'password'],
                 properties: {
-                  token: { type: 'string' },
+                  token: { type: 'string', description: 'Token from the reset link (?token=...)', example: 'paste-token-from-reset-email' },
                   password: { type: 'string', minLength: 6, maxLength: 72, example: 'NewSecurePassword@123' },
                 },
               },
@@ -1330,6 +1356,7 @@ const swaggerDocument = {
         responses: {
           200: { description: 'Password reset successful' },
           400: { description: 'Invalid or expired reset token' },
+          429: { description: 'Too many password reset attempts from this IP; 5 per 15 minutes' },
         },
       },
     },
@@ -1362,6 +1389,7 @@ const swaggerDocument = {
           201: {
             description: 'Employee account created successfully; no authentication token is returned.',
           },
+          400: { description: 'Missing name, invalid work email, or password not 6-72 characters' },
           401: { description: 'Authentication required' },
           403: { description: 'Only admin, HR, or superadmin can register employees' },
           409: {
@@ -1373,7 +1401,7 @@ const swaggerDocument = {
     '/payroll/generate': {
       post: {
         summary: 'Generate Monthly Payslips',
-        description: 'Creates pending payslips for active employees who do not already have one for the month. Employees with an existing payslip are skipped and listed in skippedEmployees. The response includes count, skippedCount, and skippedEmployees. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
+        description: 'Creates pending payslips for active employees who do not already have one for the month. Every active employee must first have a salaryStructure and a positive monthlySalary (set them via PUT /employees/{id}); otherwise the request is rejected with 400 and nothing is generated. Employees with an existing payslip are skipped and listed in skippedEmployees. The response includes count, skippedCount, and skippedEmployees. Basic pay is monthlySalary multiplied by basicPercentage. Percentage allowances are calculated on basic pay; fixed allowances are added as monthly amounts. No deductions are configured, so net pay equals gross pay. The action is audited per inserted payslip.',
         tags: ['Payroll'],
         security: [{ BearerAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
@@ -1668,10 +1696,12 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
+                description: 'Provide either employee or candidate.',
+                example: { title: 'Engineering Onboarding Checklist', employee: '66f000000000000000000001' },
                 properties: {
                   title: { type: 'string', example: 'Engineering Onboarding Checklist' },
-                  employee: { type: 'string' },
-                  candidate: { type: 'string' },
+                  employee: { type: 'string', description: 'User ID; required unless candidate is given' },
+                  candidate: { type: 'string', description: 'Candidate ID; required unless employee is given' },
                   targetCompletionDate: { type: 'string', format: 'date' },
                   tasks: {
                     type: 'array',
@@ -1695,7 +1725,11 @@ const swaggerDocument = {
         },
         responses: {
           201: { description: 'Onboarding checklist created' },
-          400: { description: 'Invalid payload' },
+          400: { description: 'Neither employee nor candidate given, or invalid IDs/dates/tasks' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Employee or candidate not found' },
+          409: { description: 'An active checklist already exists for this employee or candidate' },
         },
       },
     },
@@ -1706,6 +1740,7 @@ const swaggerDocument = {
         security: [{ BearerAuth: [] }],
         responses: {
           200: { description: 'Active onboarding checklist retrieved successfully' },
+          401: { description: 'Authentication required' },
           404: { description: 'No active onboarding checklist found' },
         },
       },
@@ -1718,6 +1753,8 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Onboarding checklist details' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Not authorized to view this onboarding checklist' },
           404: { description: 'Not found' },
         },
       },
@@ -1731,6 +1768,7 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
+                example: { status: 'In Progress' },
                 properties: {
                   title: { type: 'string' },
                   status: { type: 'string', enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'] },
@@ -1741,6 +1779,10 @@ const swaggerDocument = {
         },
         responses: {
           200: { description: 'Updated successfully' },
+          400: { description: 'Empty title, invalid status, or invalid targetCompletionDate' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Onboarding checklist not found' },
         },
       },
       delete: {
@@ -1750,6 +1792,9 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Deleted successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Onboarding checklist not found' },
         },
       },
     },
@@ -1766,6 +1811,7 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['title'],
+                example: { title: 'Collect laptop and badge', category: 'IT Setup' },
                 properties: {
                   title: { type: 'string' },
                   description: { type: 'string' },
@@ -1782,6 +1828,10 @@ const swaggerDocument = {
         },
         responses: {
           201: { description: 'Task added successfully' },
+          400: { description: 'Invalid task fields' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Onboarding checklist not found' },
         },
       },
     },
@@ -1799,6 +1849,7 @@ const swaggerDocument = {
             'application/json': {
               schema: {
                 type: 'object',
+                example: { status: 'Completed' },
                 properties: {
                   status: { type: 'string', enum: ['Pending', 'In Progress', 'Completed'] },
                   description: { type: 'string' },
@@ -1814,6 +1865,11 @@ const swaggerDocument = {
         },
         responses: {
           200: { description: 'Task updated successfully' },
+          400: { description: 'Invalid task fields' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Not authorized to update this task, or non-HR users changing more than status' },
+          404: { description: 'Onboarding checklist or task not found' },
+          409: { description: 'Cancelled onboarding checklists cannot be modified' },
         },
       },
       delete: {
@@ -1826,6 +1882,9 @@ const swaggerDocument = {
         ],
         responses: {
           200: { description: 'Task deleted successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Onboarding checklist or task not found' },
         },
       },
     },
@@ -1837,6 +1896,10 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Onboarding checklist triggered successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Candidate not found' },
+          409: { description: 'Candidate must reach Offer before onboarding can be triggered' },
         },
       },
     },
@@ -1849,6 +1912,9 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Candidate hired and onboarding initialized successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
+          404: { description: 'Candidate not found' },
           409: { description: 'Candidate must reach Offer before hiring' },
         },
       },
@@ -1861,6 +1927,9 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'candidateId', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Candidate onboarding retrieved successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/admin role required' },
+          404: { description: 'Candidate not found' },
         },
       },
     },
@@ -1877,6 +1946,8 @@ const swaggerDocument = {
         ],
         responses: {
           200: { description: 'Documents retrieved successfully' },
+          400: { description: 'Invalid category, status, employee, or candidate filter' },
+          401: { description: 'Authentication required' },
         },
       },
       post: {
@@ -1886,6 +1957,7 @@ const swaggerDocument = {
         security: [{ BearerAuth: [] }],
         responses: {
           400: { description: 'Unverified file metadata is not accepted' },
+          401: { description: 'Authentication required' },
         },
       },
     },
@@ -1913,6 +1985,10 @@ const swaggerDocument = {
         },
         responses: {
           201: { description: 'Validated document uploaded successfully' },
+          400: { description: 'Missing title or file bytes, invalid category, or invalid employee/candidate/onboarding ID' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Onboarding checklist does not belong to the uploader' },
+          404: { description: 'Employee, candidate, or onboarding checklist not found' },
           413: { description: 'File exceeds the 4MB limit or uploader storage quota' },
           415: { description: 'Unsupported or invalid file signature' },
           507: { description: 'Total document storage quota has been reached' },
@@ -1926,6 +2002,7 @@ const swaggerDocument = {
         security: [{ BearerAuth: [] }],
         responses: {
           200: { description: 'My documents retrieved successfully' },
+          401: { description: 'Authentication required' },
         },
       },
     },
@@ -1937,6 +2014,9 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Document details' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Not authorized to view this document' },
+          404: { description: 'Document not found' },
         },
       },
       delete: {
@@ -1946,6 +2026,9 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'Document deleted successfully' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Not authorized to delete this document (for example, it is already approved)' },
+          404: { description: 'Document not found' },
         },
       },
     },
@@ -1957,6 +2040,7 @@ const swaggerDocument = {
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         responses: {
           200: { description: 'File bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } },
+          401: { description: 'Authentication required' },
           403: { description: 'Not authorized to download document' },
           404: { description: 'Document or file not found' },
         },
@@ -1975,9 +2059,10 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 required: ['status'],
+                example: { status: 'Approved' },
                 properties: {
                   status: { type: 'string', enum: ['Approved', 'Rejected'] },
-                  rejectionReason: { type: 'string' },
+                  rejectionReason: { type: 'string', description: 'Required when status is Rejected' },
                 },
               },
             },
@@ -1985,6 +2070,10 @@ const swaggerDocument = {
         },
         responses: {
           200: { description: 'Document status updated successfully' },
+          400: { description: 'status must be Approved or Rejected; rejectionReason is required when Rejected' },
+          401: { description: 'Authentication required' },
+          403: { description: 'HR/Admin role required' },
+          404: { description: 'Document not found' },
         },
       },
     },
@@ -1993,7 +2082,7 @@ const swaggerDocument = {
         summary: 'List Audit Log Entries',
         description:
           'Returns a paginated, filterable list of audit log entries. ' +
-          'Restricted to the superadmin role.',
+          'Restricted to the superadmin role. Also served at the legacy alias /api/audit-log.',
         tags: ['Audit Log'],
         security: [{ BearerAuth: [] }],
         parameters: [
