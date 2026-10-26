@@ -11,7 +11,7 @@
     "backfill:department-locations": "node src/scripts/backfillDepartmentLocations.js",
     "test:leave-wfh": "cross-env NODE_ENV=test node test-leave-wfh.js",
     "test": "npm run test:unit",
-    "test:unit": "node --test test-auth-security.js test-employee-validation.js test-performance-permissions.js test-recruitment-controller.js test-request-controller.js test-payroll-controller.js test-reports-controller.js test-notification-controller.js test-onboarding-controller.js test-document-controller.js test-documents-config-audit-controller.js test-env-config.js test-swagger-coverage.js test-reset-base-url.js",
+    "test:unit": "node --test test-auth-security.js test-employee-validation.js test-performance-permissions.js test-recruitment-controller.js test-request-controller.js test-payroll-controller.js test-reports-controller.js test-notification-controller.js test-onboarding-controller.js test-document-controller.js test-documents-config-audit-controller.js test-hr-attendance.js",
     "test:integration:notifications": "cross-env NODE_ENV=test node test-notification-reports.integration.js",
     "test:integration:documents-audit-config": "cross-env NODE_ENV=test node --test test-documents-audit-config.integration.js",
     "test:request": "node --test test-request-controller.js",
@@ -28,6 +28,7 @@
     "test:recruitment:postman": "cross-env NODE_ENV=test node test-recruitment-postman-runner.js",
     "test:onboarding": "node --test test-onboarding-controller.js",
     "test:documents": "node --test test-document-controller.js",
+    "test:attendance": "node --test test-hr-attendance.js",
     "test:notifications": "node --test test-notification-controller.js",
     "test:email:smtp": "node test-live-email-smtp.js"
   },
