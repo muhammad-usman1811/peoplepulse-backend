@@ -966,7 +966,7 @@ const swaggerDocument = {
                   department: { type: 'string' }, designation: { type: 'string' }, location: { type: 'string' },
                   manager: { type: 'string', nullable: true },
                   salaryStructure: { type: 'string', description: 'Salary structure ObjectId; provide with monthlySalary' },
-                  monthlySalary: { type: 'number', exclusiveMinimum: 0, description: 'Monthly base used to calculate basic pay' },
+                  monthlySalary: { type: 'number', minimum: 0, exclusiveMinimum: true, description: 'Monthly base used to calculate basic pay' },
                   status: { type: 'string', enum: ['active', 'on-leave'], default: 'active' },
                 },
               }
