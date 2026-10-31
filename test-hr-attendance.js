@@ -11,6 +11,9 @@ const zlib = require('node:zlib');
 // ApiResponse) while the Attendance and User models are served from memory.
 process.env.NODE_ENV = 'test';
 process.env.APP_TIMEZONE = 'Asia/Karachi';
+// Fixed test keys, set before the app loads so dotenv never supplies the real ones from .env.
+process.env.JWT_SECRET = 'hr-attendance-unit-test-secret';
+process.env.ENCRYPTION_KEY = 'a'.repeat(64);
 mongoose.connect = async () => ({ connection: { host: 'stub', name: 'stub' } });
 const app = require('./src/server');
 const User = require('./src/models/User');
