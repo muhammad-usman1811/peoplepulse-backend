@@ -680,6 +680,22 @@ test('browser clients can read the download filename through CORS', async () => 
   assert.equal(response.headers.get('access-control-expose-headers'), 'Content-Disposition');
 });
 
+test('a database outage during authentication returns 500, not an invalid-token 401', async () => {
+  User.findById = async () => {
+    throw new Error('Server selection timed out after 30000 ms');
+  };
+  const errors = captureErrors();
+  try {
+    const res = await get(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
+    assert.equal(res.status, 500);
+    assert.equal(res.body.success, false);
+    assert.notEqual(res.body.message, 'Invalid authentication token.');
+    assert.deepEqual(queries, [], 'the export never starts');
+  } finally {
+    errors.restore();
+  }
+});
+
 test('csv export ignores page and limit: the file is identical with or without them', async () => {
   const plain = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
   for (const extra of ['page=2&limit=1', 'page=0&limit=abc', 'limit=1000000']) {

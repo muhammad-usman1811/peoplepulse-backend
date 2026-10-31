@@ -250,6 +250,43 @@ test('middleware rejects an older session token after password reset', async () 
   assert.equal(nextCalled, false);
 });
 
+test('a database failure during the user lookup is a server error, not an invalid token', async () => {
+  const userId = new mongoose.Types.ObjectId();
+  const token = jwt.sign({ id: userId, tokenVersion: 0 }, process.env.JWT_SECRET);
+  const outage = new Error('Server selection timed out after 30000 ms');
+  User.findById = async () => { throw outage; };
+  const res = response();
+  let forwarded;
+
+  await protect({ headers: { authorization: `Bearer ${token}` } }, res, (err) => { forwarded = err; });
+
+  assert.equal(forwarded, outage);
+  assert.equal(res.body, null, 'no 401 may be sent for a database outage');
+});
+
+test('malformed, forged, not-yet-valid, and non-ObjectId tokens are still rejected with 401', async () => {
+  const userId = new mongoose.Types.ObjectId();
+  const activeUser = async () => ({ _id: userId, isActive: true, tokenVersion: 0 });
+  const castError = async () => {
+    const err = new Error('Cast to ObjectId failed for value "not-an-object-id"');
+    err.name = 'CastError';
+    throw err;
+  };
+  const cases = [
+    ['malformed', 'not-a-jwt', activeUser],
+    ['forged', jwt.sign({ id: userId, tokenVersion: 0 }, 'some-other-secret'), activeUser],
+    ['not yet valid', jwt.sign({ id: userId, tokenVersion: 0 }, process.env.JWT_SECRET, { notBefore: 3600 }), activeUser],
+    ['non-ObjectId id', jwt.sign({ id: 'not-an-object-id', tokenVersion: 0 }, process.env.JWT_SECRET), castError],
+  ];
+  for (const [label, token, lookup] of cases) {
+    User.findById = lookup;
+    const res = response();
+    await protect({ headers: { authorization: `Bearer ${token}` } }, res, (err) => assert.fail(`${label} must not continue: ${err}`));
+    assert.equal(res.statusCode, 401, label);
+    assert.deepEqual(res.body, { success: false, message: 'Invalid authentication token.' }, label);
+  }
+});
+
 test('auth middleware rejects missing tokens, inactive users, and client-forged roles', async (t) => {
   await t.test('missing token', async () => {
     const res = response();

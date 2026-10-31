@@ -3,6 +3,10 @@ const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { getJwtSecret } = require('../config/security');
 
+// jsonwebtoken's errors for malformed, forged, or not-yet-valid tokens; CastError is a
+// verified token whose id is not an ObjectId.
+const INVALID_TOKEN_ERRORS = ['JsonWebTokenError', 'NotBeforeError', 'CastError'];
+
 /**
  * Middleware to protect private routes with JWT Bearer tokens
  */
@@ -74,12 +78,18 @@ const protect = async (req, res, next) => {
         401
       );
     }
-    return ApiResponse.error(
-      res,
-      'Invalid authentication token.',
-      null,
-      401
-    );
+    // Only a bad token means "log in again". Anything else, such as the database being
+    // unreachable during the user lookup, is a server error: answering 401 would make
+    // clients sign users out during an outage.
+    if (INVALID_TOKEN_ERRORS.includes(err.name)) {
+      return ApiResponse.error(
+        res,
+        'Invalid authentication token.',
+        null,
+        401
+      );
+    }
+    return next(err);
   }
 };
 
