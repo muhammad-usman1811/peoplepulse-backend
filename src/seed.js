@@ -58,7 +58,7 @@ const seedUsers = async () => {
     });
 
     // 2. Regular Employee
-    const employee = await User.create({
+    await User.create({
       name: 'Sarah Connor',
       email: 'sarah.connor@peoplepulse.com',
       password: process.env.SEED_PASSWORD,

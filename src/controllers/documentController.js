@@ -494,12 +494,6 @@ exports.updateDocumentStatus = async (req, res, next) => {
     }
 
     const wasApproved = document.status === 'Approved';
-    const previousDocumentState = {
-      status: document.status,
-      verifiedBy: document.verifiedBy,
-      verifiedAt: document.verifiedAt,
-      rejectionReason: document.rejectionReason,
-    };
     document.status = status;
     document.verifiedBy = req.user._id;
     document.verifiedAt = new Date();

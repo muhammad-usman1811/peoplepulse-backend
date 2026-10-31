@@ -5,7 +5,6 @@ const User = require('../models/User');
 const Document = require('../models/Document');
 const ApiResponse = require('../utils/apiResponse');
 const recordAudit = require('../utils/recordAudit');
-const notify = require('../utils/notify');
 const { triggerOnboardingForCandidate, DEFAULT_ONBOARDING_TASKS } = require('../utils/triggerOnboarding');
 const { parsePositiveInteger } = require('../utils/pagination');
 
