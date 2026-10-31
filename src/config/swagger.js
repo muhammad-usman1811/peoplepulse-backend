@@ -777,6 +777,106 @@ const swaggerDocument = {
         },
       },
     },
+    '/v1/attendance/export': {
+      get: {
+        summary: 'Export Attendance for a Day (HR/Admin)',
+        description:
+          'Downloads every attendance record for one calendar day, selected exactly as the HR Attendance List selects them and in the same order '
+          + '(clock-in time, then record ID). Dates and times use APP_TIMEZONE (default Asia/Karachi). '
+          + '`page` and `limit` are ignored: the export is never paginated. The file is streamed, so large days do not load into memory.\n\n'
+          + '**CSV:** UTF-8 with a byte-order mark (for Excel). Columns: Employee Name, Employee ID, Date (YYYY-MM-DD), Check In and Check Out (hh:mm AM/PM), '
+          + 'Status, Working Hours (e.g. `8h 20m`; empty until the employee clocks out). A day with no records returns just the header row. '
+          + 'Cells starting with `=`, `+`, `-`, or `@` are prefixed with an apostrophe so spreadsheets never run them as formulas.\n\n'
+          + '**PDF:** A4 landscape table with the same columns under the title "Attendance Report - YYYY-MM-DD", the table header repeated on every page, '
+          + 'and a total record count at the end. Long values are cut off with an ellipsis. A day with no records returns a PDF saying "No records found for this date". '
+          + 'The PDF uses a Latin font, so employee names must be written in English (Latin script); the CSV supports any script.\n\n'
+          + '**Errors:** a database failure before the download starts returns a JSON 500. A failure after it starts aborts the connection, '
+          + 'so the client sees a failed download rather than a truncated file.\n\n'
+          + '**Authentication:** Bearer JWT required.\n\n**Access:** HR and admin roles only. Every other role (employee, finance, superadmin) receives 403.',
+        tags: ['Attendance'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            in: 'query',
+            name: 'format',
+            required: true,
+            schema: { type: 'string', enum: ['csv', 'pdf'], example: 'csv' },
+            description: 'Export file format (lowercase)',
+          },
+          {
+            in: 'query',
+            name: 'date',
+            required: true,
+            schema: { type: 'string', format: 'date', pattern: '^\\d{4}-\\d{2}-\\d{2}$', example: '2026-10-23' },
+            description: 'Calendar day to export (YYYY-MM-DD). Must be a real date and not in the future.',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'File download: `text/csv` for format=csv, `application/pdf` for format=pdf. '
+              + 'Sent with `Content-Disposition: attachment; filename="attendance-report-YYYY-MM-DD.csv"` (or `.pdf`).',
+            headers: {
+              'Content-Disposition': {
+                description: 'Always an attachment named after the exported day: `attendance-report-YYYY-MM-DD.csv` or `attendance-report-YYYY-MM-DD.pdf`. '
+                  + 'Exposed to browser clients through CORS, so a web app can read the filename.',
+                schema: { type: 'string', example: 'attachment; filename="attendance-report-2026-10-23.csv"' },
+              },
+              'Cache-Control': {
+                description: 'Always `no-store`: the file holds employee names and IDs.',
+                schema: { type: 'string', example: 'no-store' },
+              },
+            },
+            content: {
+              'text/csv': {
+                schema: { type: 'string', format: 'binary' },
+                example: 'Employee Name,Employee ID,Date,Check In,Check Out,Status,Working Hours\n'
+                  + 'Ayesha Khan,EMP-1001,2026-10-23,08:45 AM,05:05 PM,present,8h 20m\n'
+                  + 'Usman Ali,EMP-1004,2026-10-23,09:15 AM,,late,\n',
+              },
+              'application/pdf': {
+                schema: { type: 'string', format: 'binary' },
+              },
+            },
+          },
+          400: {
+            description: 'Missing or invalid query parameter. When both are invalid, both messages are joined with "; ".',
+            content: {
+              'application/json': {
+                examples: {
+                  invalidFormat: { summary: 'format missing or not csv/pdf', value: { success: false, message: "format is required and must be 'csv' or 'pdf'" } },
+                  invalidDate: { summary: 'date missing, malformed, or impossible', value: { success: false, message: 'date is required and must be a valid date in YYYY-MM-DD format' } },
+                  futureDate: { summary: 'date after today', value: { success: false, message: 'date cannot be in the future' } },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized - Invalid or missing token',
+            content: {
+              'application/json': {
+                example: { success: false, message: 'Access denied. No authentication token provided.' },
+              },
+            },
+          },
+          403: {
+            description: 'Forbidden - only HR and admin roles can export attendance; a deactivated account also receives 403',
+            content: {
+              'application/json': {
+                example: { success: false, message: "User role 'employee' is not authorized to access this resource" },
+              },
+            },
+          },
+          500: {
+            description: 'The attendance query failed before the download started',
+            content: {
+              'application/json': {
+                example: { success: false, message: 'Failed to export attendance.' },
+              },
+            },
+          },
+        },
+      },
+    },
     '/payroll/salary-structure': {
       get: {
         summary: 'List Salary Structures',

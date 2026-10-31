@@ -4,8 +4,8 @@ const Attendance = require('../models/Attendance');
 const User = require('../models/User');
 const ApiResponse = require('../utils/apiResponse');
 const { parsePositiveInteger } = require('../utils/pagination');
-
-const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Karachi';
+const { buildDayFilter, streamCsv, streamPdf } = require('../services/attendanceExportService');
+const { APP_TIMEZONE } = require('../config/timezone');
 const HR_LIST_DEFAULT_LIMIT = 10;
 const HR_LIST_MAX_LIMIT = 50;
 // Only these employee fields leave the API on the HR list; never email, phone, salary, or auth data.
@@ -299,12 +299,7 @@ exports.listHrAttendance = async (req, res, next) => {
       });
     }
 
-    const filter = {
-      date: {
-        $gte: day.startOf('day').toUTC().toJSDate(),
-        $lte: day.endOf('day').toUTC().toJSDate(),
-      },
-    };
+    const filter = buildDayFilter(day);
 
     // _id breaks clock-in ties so a record never appears on two pages.
     const [totalRecords, records] = await Promise.all([
@@ -326,6 +321,16 @@ exports.listHrAttendance = async (req, res, next) => {
         totalPages: Math.ceil(totalRecords / limit),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.exportHrAttendance = async (req, res, next) => {
+  try {
+    const { format, date } = req.validatedQuery;
+    if (format === 'pdf') return await streamPdf(date, res);
+    return await streamCsv(date, res);
   } catch (err) {
     next(err);
   }

@@ -3,6 +3,9 @@ const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { DateTime } = require('luxon');
+const { Readable } = require('node:stream');
+const { once } = require('node:events');
+const zlib = require('node:zlib');
 
 // Database-free: requests go through the real app (protect, authorize, routing,
 // ApiResponse) while the Attendance and User models are served from memory.
@@ -13,6 +16,7 @@ const app = require('./src/server');
 const User = require('./src/models/User');
 const Attendance = require('./src/models/Attendance');
 const { getJwtSecret } = require('./src/config/security');
+const { encrypt } = require('./src/utils/cryptoUtils');
 
 const ZONE = 'Asia/Karachi';
 const ENDPOINT = '/api/v1/attendance';
@@ -98,8 +102,21 @@ const applySort = (list, spec) =>
       })
     : list;
 
+// Builds the stream that .cursor() returns from the matching records; tests replace it
+// to simulate database failures and long-running cursors.
+const defaultCursor = (docs) => {
+  const cursor = Readable.from(docs);
+  // Mongoose's QueryCursor overrides for-await to read with next(), bypassing documents the
+  // export has already buffered in the stream; fail loudly if the export ever relies on it.
+  cursor[Symbol.asyncIterator] = () => {
+    throw new Error('QueryCursor[Symbol.asyncIterator] skips buffered documents');
+  };
+  return cursor;
+};
+let makeCursor = defaultCursor;
+
 const fakeQuery = (resolve) => {
-  const state = { sort: null, skip: 0, limit: Infinity, select: null, populate: null };
+  const state = { sort: null, skip: 0, limit: Infinity, select: null, populate: null, lean: false, cursor: null };
   const query = {
     sort(spec) {
       state.sort = spec;
@@ -112,6 +129,14 @@ const fakeQuery = (resolve) => {
     limit(n) {
       state.limit = n;
       return query;
+    },
+    lean() {
+      state.lean = true;
+      return query;
+    },
+    cursor(options) {
+      state.cursor = options;
+      return makeCursor(resolve(state));
     },
     select(fields) {
       state.select = fields;
@@ -230,6 +255,7 @@ test.beforeEach(() => {
   queries = [];
   accounts.clear();
   installStores();
+  makeCursor = defaultCursor;
   hrToken = tokenFor('hr');
 });
 
@@ -529,6 +555,430 @@ test('only GET is exposed on the HR attendance list', async () => {
     headers: { Authorization: `Bearer ${hrToken}` },
   });
   assert.equal(response.status, 404);
+});
+
+// --- Export route: auth, role, and validation order ---
+
+const EXPORT_ENDPOINT = `${ENDPOINT}/export`;
+
+test('export without a token returns 401, even with an invalid query', async () => {
+  const res = await get(`${EXPORT_ENDPOINT}?format=xlsx`, null);
+  assert.equal(res.status, 401);
+  assert.deepEqual(res.body, { success: false, message: 'Access denied. No authentication token provided.' });
+});
+
+test('export with an invalid token returns 401', async () => {
+  const res = await get(`${EXPORT_ENDPOINT}?format=csv&date=2025-03-12`, 'not-a-jwt');
+  assert.equal(res.status, 401);
+});
+
+test('export is forbidden to every role except hr and admin, before query validation', async () => {
+  for (const role of ['employee', 'finance', 'superadmin']) {
+    const res = await get(`${EXPORT_ENDPOINT}?format=xlsx`, tokenFor(role));
+    assert.equal(res.status, 403, `${role} must be forbidden`);
+    assert.deepEqual(res.body, {
+      success: false,
+      message: `User role '${role}' is not authorized to access this resource`,
+    });
+  }
+});
+
+test('export rejects an invalid query with 400 for hr and admin', async () => {
+  for (const role of ['hr', 'admin']) {
+    const res = await get(`${EXPORT_ENDPOINT}?format=xlsx&date=2026-02-31`, tokenFor(role));
+    assert.equal(res.status, 400);
+    assert.deepEqual(res.body, {
+      success: false,
+      message: "format is required and must be 'csv' or 'pdf'; date is required and must be a valid date in YYYY-MM-DD format",
+    });
+  }
+});
+
+// --- Export: CSV streaming ---
+
+const BOM = '﻿';
+const CSV_HEADER = 'Employee Name,Employee ID,Date,Check In,Check Out,Status,Working Hours\n';
+// LATEST_DAY in clock-in order: the absent row (null clock-in) sorts first, and the
+// 08:50 tie is broken by record ID (Bilal 12 before Sara 13), exactly as the HR list orders them.
+const LATEST_DAY_CSV = CSV_HEADER
+  + ',,2025-03-12,,,absent,\n'
+  + 'Ayesha Khan,EMP-1001,2025-03-12,08:45 AM,05:05 PM,present,8h 20m\n'
+  + 'Bilal Ahmed,EMP-1002,2025-03-12,08:50 AM,,half-day,\n'
+  + 'Sara Malik,EMP-1003,2025-03-12,08:50 AM,,present,\n'
+  + 'Usman Ali,EMP-1004,2025-03-12,09:15 AM,,late,\n';
+
+const download = async (path, token = hrToken) => {
+  const response = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  // Decoded by hand: response.text() would silently drop the BOM under test.
+  return { status: response.status, headers: response.headers, text: Buffer.from(await response.arrayBuffer()).toString('utf8') };
+};
+
+// Captures console.error so expected failures stay out of the test output.
+const captureErrors = () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args);
+  return { logged, restore: () => { console.error = original; } };
+};
+
+test('csv export streams every record for the day with download headers', async () => {
+  for (const role of ['hr', 'admin']) {
+    const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`, tokenFor(role));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'text/csv; charset=utf-8');
+    assert.equal(res.headers.get('content-disposition'), `attachment; filename="attendance-report-${LATEST_DAY}.csv"`);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.equal(res.text, BOM + LATEST_DAY_CSV);
+  }
+});
+
+test('csv export reads through a lean cursor with the same filter and order as the HR list, unpaginated', async () => {
+  await get(`${ENDPOINT}?date=${LATEST_DAY}&limit=2`);
+  const listFind = queries.find((q) => q.op === 'find');
+  queries = [];
+
+  await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}&page=3&limit=2`);
+  assert.deepEqual(queries.map((q) => q.op), ['find'], 'no count or array-loading query');
+  const [exportFind] = queries;
+
+  assert.deepEqual(exportFind.filter, listFind.filter);
+  assert.deepEqual(exportFind.state.sort, listFind.state.sort);
+  assert.deepEqual(exportFind.state.cursor, { batchSize: 500 });
+  assert.equal(exportFind.state.lean, true);
+  assert.equal(exportFind.state.skip, 0);
+  assert.equal(exportFind.state.limit, Infinity);
+  assert.deepEqual(exportFind.state.populate, { path: 'employee', fields: 'name employeeId' });
+});
+
+test('each invalid export query returns 400 with a readable message', async () => {
+  const FORMAT = "format is required and must be 'csv' or 'pdf'";
+  const DATE = 'date is required and must be a valid date in YYYY-MM-DD format';
+  const cases = [
+    [`date=${LATEST_DAY}`, FORMAT], // missing format
+    [`format=xlsx&date=${LATEST_DAY}`, FORMAT],
+    ['format=csv', DATE], // missing date
+    ['format=csv&date=2026-13-45', DATE],
+    ['format=csv&date=30-10-2026', DATE],
+    // Same rule and message as the HR list, so the export never offers a day the list refuses
+    [`format=csv&date=${today().plus({ days: 1 }).toISODate()}`, 'date cannot be in the future'],
+  ];
+  for (const [query, message] of cases) {
+    const res = await get(`${EXPORT_ENDPOINT}?${query}`);
+    assert.equal(res.status, 400, query);
+    assert.deepEqual(res.body, { success: false, message }, query);
+  }
+  assert.deepEqual(queries, [], 'invalid queries never reach the database');
+});
+
+test('browser clients can read the download filename through CORS', async () => {
+  const response = await fetch(`${baseUrl}${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`, {
+    headers: { Authorization: `Bearer ${hrToken}`, Origin: 'http://localhost:3000' },
+  });
+  await response.arrayBuffer();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:3000');
+  assert.equal(response.headers.get('access-control-expose-headers'), 'Content-Disposition');
+});
+
+test('csv export ignores page and limit: the file is identical with or without them', async () => {
+  const plain = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
+  for (const extra of ['page=2&limit=1', 'page=0&limit=abc', 'limit=1000000']) {
+    const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}&${extra}`);
+    assert.equal(res.status, 200, extra);
+    assert.equal(res.text, plain.text, extra);
+  }
+});
+
+test('exports decrypt employee names, which are encrypted at rest and skipped by lean() getters', async () => {
+  const stored = encrypt('Zainab Qureshi');
+  assert.notEqual(stored, 'Zainab Qureshi');
+  const zainab = addEmployee(70, 'EMP-1070', stored);
+  records = [attendance(70, zainab, EMPTY_DAY, '09:00')];
+
+  const csv = await download(`${EXPORT_ENDPOINT}?format=csv&date=${EMPTY_DAY}`);
+  assert.equal(csv.text, `${BOM}${CSV_HEADER}Zainab Qureshi,EMP-1070,2025-03-11,09:00 AM,,present,\n`);
+
+  const pdf = await downloadPdf(`${EXPORT_ENDPOINT}?format=pdf&date=${EMPTY_DAY}`);
+  assert.ok(pdfPages(pdf.body)[0].includes('Zainab Qureshi'));
+  assert.ok(!pdf.body.toString('latin1').includes(stored));
+});
+
+test('csv export never includes contact, salary, or account fields', async () => {
+  const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
+  for (const value of ['private.person@example.test', '+92 300 0000000', '250000', 'reset-token-hash']) {
+    assert.ok(!res.text.includes(value), `${value} leaked into the CSV`);
+  }
+});
+
+test('csv export of a day with no records is a header-only CSV, not an error', async () => {
+  const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${EMPTY_DAY}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-disposition'), `attachment; filename="attendance-report-${EMPTY_DAY}.csv"`);
+  assert.equal(res.text, BOM + CSV_HEADER);
+});
+
+test('csv export neutralizes spreadsheet formulas and quotes special characters', async () => {
+  const mallory = addEmployee(50, '=HYPERLINK("http://evil.test")', '@SUM(A1:A9)');
+  const comma = addEmployee(51, '+92', 'Khan, Imran');
+  records = [
+    attendance(60, mallory, EMPTY_DAY, '09:00'),
+    attendance(61, comma, EMPTY_DAY, '09:05'),
+  ];
+
+  const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${EMPTY_DAY}`);
+  assert.equal(res.text, BOM + CSV_HEADER
+    + `'@SUM(A1:A9),"'=HYPERLINK(""http://evil.test"")",2025-03-11,09:00 AM,,present,\n`
+    + `"Khan, Imran",'+92,2025-03-11,09:05 AM,,present,\n`);
+});
+
+test('a database error before any data is sent returns a JSON 500', async () => {
+  makeCursor = () => new Readable({
+    objectMode: true,
+    read() {
+      this.destroy(new Error('connection lost'));
+    },
+  });
+  const errors = captureErrors();
+  try {
+    const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
+    assert.equal(res.status, 500);
+    assert.match(res.headers.get('content-type'), /^application\/json/);
+    assert.equal(res.headers.get('content-disposition'), null);
+    assert.deepEqual(JSON.parse(res.text), { success: false, message: 'Failed to export attendance.' });
+    assert.equal(errors.logged.length, 1);
+  } finally {
+    errors.restore();
+  }
+});
+
+test('a database error mid-stream aborts the download, is logged, and leaves the server running', async () => {
+  let cursor;
+  makeCursor = (docs) => (cursor = Readable.from((async function* () {
+    yield docs[0];
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    throw new Error('cursor died');
+  })()));
+  const errors = captureErrors();
+  try {
+    await assert.rejects(async () => {
+      const response = await fetch(`${baseUrl}${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`, {
+        headers: { Authorization: `Bearer ${hrToken}` },
+      });
+      assert.equal(response.status, 200);
+      await response.text();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(cursor.destroyed, true);
+    assert.equal(errors.logged.length, 1);
+    assert.equal(errors.logged[0][1].message, 'cursor died');
+  } finally {
+    errors.restore();
+  }
+
+  makeCursor = defaultCursor;
+  const res = await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
+  assert.equal(res.status, 200);
+});
+
+test('a client disconnect mid-download closes the cursor without logging an error', async () => {
+  let cursor;
+  // An endless cursor: only the disconnect can stop it.
+  makeCursor = (docs) => (cursor = Readable.from((function* () {
+    for (;;) yield docs[0];
+  })()));
+  const errors = captureErrors();
+  try {
+    const abort = new AbortController();
+    const response = await fetch(`${baseUrl}${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`, {
+      headers: { Authorization: `Bearer ${hrToken}` },
+      signal: abort.signal,
+    });
+    const reader = response.body.getReader();
+    await reader.read();
+    abort.abort();
+
+    if (!cursor.destroyed) await once(cursor, 'close');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(cursor.destroyed, true);
+    assert.deepEqual(errors.logged, []);
+  } finally {
+    errors.restore();
+  }
+});
+
+// --- Export: PDF streaming ---
+
+// The text drawn on each page, one string per PDFKit text run: each page's content stream is
+// inflated and the hex glyph strings of every TJ operator joined (standard fonts are WinAnsi).
+// Streams are sliced by their declared /Length; a delimiter regex would cut off a compressed
+// body that happens to end in \r.
+const pdfPages = (buffer) =>
+  [...buffer.toString('latin1').matchAll(/\/Length (\d+)[^>]*>>\s*stream\n/g)]
+    .map((m) => {
+      const start = m.index + m[0].length;
+      return zlib.inflateSync(buffer.subarray(start, start + Number(m[1]))).toString('latin1');
+    })
+    .map((content) => [...content.matchAll(/\[([^\]]*)\] TJ/g)]
+      .map(([, parts]) => [...parts.matchAll(/<([0-9a-f]*)>/gi)]
+        .map(([, hex]) => Buffer.from(hex, 'hex').toString('latin1'))
+        .join('')));
+
+const downloadPdf = async (path, token = hrToken) => {
+  const response = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  return { status: response.status, headers: response.headers, body: Buffer.from(await response.arrayBuffer()) };
+};
+
+const PDF_TABLE_HEADER = ['Employee Name', 'Employee ID', 'Date', 'Check In', 'Check Out', 'Status', 'Working Hours'];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('pdf export draws the title, table header, and every record of the day in list order', async () => {
+  for (const role of ['hr', 'admin']) {
+    const res = await downloadPdf(`${EXPORT_ENDPOINT}?format=pdf&date=${LATEST_DAY}`, tokenFor(role));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/pdf');
+    assert.equal(res.headers.get('content-disposition'), `attachment; filename="attendance-report-${LATEST_DAY}.pdf"`);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.equal(res.body.subarray(0, 5).toString('latin1'), '%PDF-');
+    assert.match(res.body.subarray(-8).toString('latin1'), /%%EOF\s*$/);
+
+    // Empty cells draw no text, so the absent row shows only its date and status.
+    assert.deepEqual(pdfPages(res.body), [[
+      `Attendance Report - ${LATEST_DAY}`,
+      'Times shown in Asia/Karachi',
+      ...PDF_TABLE_HEADER,
+      LATEST_DAY, 'absent',
+      'Ayesha Khan', 'EMP-1001', LATEST_DAY, '08:45 AM', '05:05 PM', 'present', '8h 20m',
+      'Bilal Ahmed', 'EMP-1002', LATEST_DAY, '08:50 AM', 'half-day',
+      'Sara Malik', 'EMP-1003', LATEST_DAY, '08:50 AM', 'present',
+      'Usman Ali', 'EMP-1004', LATEST_DAY, '09:15 AM', 'late',
+      'Total records: 5',
+    ]]);
+  }
+});
+
+test('pdf export of a day with no records says so instead of drawing an empty table', async () => {
+  const res = await downloadPdf(`${EXPORT_ENDPOINT}?format=pdf&date=${EMPTY_DAY}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-disposition'), `attachment; filename="attendance-report-${EMPTY_DAY}.pdf"`);
+  assert.deepEqual(pdfPages(res.body), [[
+    `Attendance Report - ${EMPTY_DAY}`,
+    'Times shown in Asia/Karachi',
+    'No records found for this date',
+  ]]);
+});
+
+test('pdf export breaks long days across pages and repeats the table header on each page', async () => {
+  records = Array.from({ length: 60 }, (_, i) => {
+    const worker = addEmployee(200 + i, `EMP-3${String(i).padStart(3, '0')}`, `Worker ${String(i).padStart(2, '0')}`);
+    return attendance(200 + i, worker, EMPTY_DAY, DateTime.fromObject({ hour: 8 }).plus({ minutes: i }).toFormat('HH:mm'));
+  });
+
+  const pages = pdfPages((await downloadPdf(`${EXPORT_ENDPOINT}?format=pdf&date=${EMPTY_DAY}`)).body);
+  assert.equal(pages.length, 3);
+  pages.forEach((page, index) => {
+    const header = index === 0 ? page.slice(2, 9) : page.slice(0, 7);
+    assert.deepEqual(header, PDF_TABLE_HEADER, `page ${index + 1} must start its table with the header`);
+    assert.equal(page.filter((text) => text === 'Employee Name').length, 1);
+  });
+
+  // Every record exactly once, in clock-in order, including the first batch the cursor buffered.
+  const names = pages.flat().filter((text) => /^Worker \d+$/.test(text));
+  assert.deepEqual(names, records.map((_, i) => `Worker ${String(i).padStart(2, '0')}`));
+  assert.equal(pages.at(-1).at(-1), 'Total records: 60');
+});
+
+test('pdf export reads the same lean cursor query as the csv export', async () => {
+  await download(`${EXPORT_ENDPOINT}?format=csv&date=${LATEST_DAY}`);
+  const [csvFind] = queries;
+  queries = [];
+
+  await downloadPdf(`${EXPORT_ENDPOINT}?format=pdf&date=${LATEST_DAY}&page=2&limit=1`);
+  assert.deepEqual(queries.map((q) => q.op), ['find'], 'no count or array-loading query');
+  assert.deepEqual(queries[0].filter, csvFind.filter);
+  assert.deepEqual(queries[0].state, csvFind.state);
+});
+
+test('pdf export answers a database error before any data with a JSON 500', async () => {
+  makeCursor = () => new Readable({
+    objectMode: true,
+    read() {
+      this.destroy(new Error('connection lost'));
+    },
+  });
+  const errors = captureErrors();
+  try {
+    const res = await download(`${EXPORT_ENDPOINT}?format=pdf&date=${LATEST_DAY}`);
+    assert.equal(res.status, 500);
+    assert.equal(res.headers.get('content-disposition'), null);
+    assert.deepEqual(JSON.parse(res.text), { success: false, message: 'Failed to export attendance.' });
+    assert.equal(errors.logged.length, 1);
+  } finally {
+    errors.restore();
+  }
+});
+
+test('pdf export aborts the download on a mid-stream database error, logs it, and keeps the server running', async () => {
+  let cursor;
+  makeCursor = (docs) => (cursor = Readable.from((async function* () {
+    yield docs[0];
+    await sleep(20);
+    throw new Error('cursor died');
+  })()));
+  const errors = captureErrors();
+  try {
+    await assert.rejects(async () => {
+      const response = await fetch(`${baseUrl}${EXPORT_ENDPOINT}?format=pdf&date=${LATEST_DAY}`, {
+        headers: { Authorization: `Bearer ${hrToken}` },
+      });
+      assert.equal(response.status, 200);
+      await response.arrayBuffer();
+    });
+    await sleep(20);
+    assert.equal(cursor.destroyed, true);
+    assert.equal(errors.logged.length, 1);
+    assert.equal(errors.logged[0][1].message, 'cursor died');
+  } finally {
+    errors.restore();
+  }
+
+  makeCursor = defaultCursor;
+  assert.equal((await downloadPdf(`${EXPORT_ENDPOINT}?format=pdf&date=${LATEST_DAY}`)).status, 200);
+});
+
+test('pdf export stops reading the cursor while the client is not reading, and closes it on disconnect', async () => {
+  let cursor;
+  let pulled = 0;
+  // An endless cursor: only backpressure can pause it and only the disconnect can stop it.
+  makeCursor = (docs) => (cursor = Readable.from((function* () {
+    for (;;) {
+      pulled += 1;
+      yield docs[0];
+    }
+  })()));
+  const errors = captureErrors();
+  try {
+    const abort = new AbortController();
+    // The body is never read, so the socket fills up and the response needs to drain.
+    await fetch(`${baseUrl}${EXPORT_ENDPOINT}?format=pdf&date=${LATEST_DAY}`, {
+      headers: { Authorization: `Bearer ${hrToken}` },
+      signal: abort.signal,
+    });
+
+    let previous = -1;
+    for (let i = 0; i < 50 && pulled !== previous; i += 1) {
+      previous = pulled;
+      await sleep(200);
+    }
+    assert.equal(pulled, previous, 'the cursor kept being read while the client was not reading');
+
+    abort.abort();
+    if (!cursor.destroyed) await once(cursor, 'close');
+    await sleep(20);
+    assert.equal(cursor.destroyed, true);
+    assert.deepEqual(errors.logged, []);
+  } finally {
+    errors.restore();
+  }
 });
 
 test('the existing /api/attendance admin query keeps its access rules', async () => {

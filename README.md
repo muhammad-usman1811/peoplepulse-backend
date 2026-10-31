@@ -198,6 +198,7 @@ Employee `User.location` is currently stored as a canonical `Location.name` stri
 - **GET** `/attendance/team?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (direct reports)
 - **GET** `/attendance?employeeId=<id>&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30` (Admin/HR, all employees)
 - **GET** `/v1/attendance?date=YYYY-MM-DD&page=1&limit=10` (HR only): HR Attendance List for one day. `date` defaults to the latest day with attendance and cannot be in the future; `limit` is 1-50. Returns `date`, `records` (employee ID, name, department, designation plus clock-in/out and status only), and `pagination` (`page`, `limit`, `totalRecords`, `totalPages`).
+- **GET** `/v1/attendance/export?format=csv|pdf&date=YYYY-MM-DD` (HR and Admin): streams every attendance record for that day as a file download (`attendance-report-YYYY-MM-DD.csv` or `.pdf`), selected and ordered exactly like the HR Attendance List. Both parameters are required, `date` cannot be in the future, and `page` and `limit` are ignored. Columns: employee name, employee ID, date, check-in, check-out, status, working hours. An empty day returns a header-only CSV or a PDF saying "No records found for this date". The PDF uses a Latin font, so employee names must be in English; the CSV supports any script. Responses are sent with `Cache-Control: no-store`.
 
 Attendance timestamps are stored in UTC. Calendar dates and the 9:00 AM late threshold use `APP_TIMEZONE` (default `Asia/Karachi`).
 

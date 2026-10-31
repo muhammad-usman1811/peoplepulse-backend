@@ -115,6 +115,9 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  // File downloads such as the attendance export need a Bearer token, so the web app has
+  // to fetch them; without this the browser hides the filename in Content-Disposition.
+  exposedHeaders: ['Content-Disposition'],
 };
 
 app.use(cors(corsOptions));
