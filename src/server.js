@@ -183,6 +183,7 @@ app.use('/api/recruitment', recruitmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/v1/documents', require('./routes/hrDocumentRoutes'));
 // Upload-only EmployeeDocument API (separate store from /api/documents; see review)
 app.use('/api/employee-documents', employeeDocumentRoutes);
 app.use('/api/audit-log', auditLogRoutes);

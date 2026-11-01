@@ -2512,4 +2512,5 @@ const swaggerDocument = {
   },
 };
 
+Object.assign(swaggerDocument.paths, require('./hrDocumentSwagger'));
 module.exports = swaggerDocument;
