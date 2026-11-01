@@ -1,0 +1,12 @@
+const router = require('express').Router();
+const { protect, authorize } = require('../middleware/authMiddleware');
+const c = require('../controllers/hrDocumentController');
+router.use(protect);
+const manage = authorize('hr', 'admin');
+router.post('/upload-url', manage, c.uploadUrl);
+router.post('/', manage, c.create);
+router.get('/', c.list);
+router.get('/:id/preview', c.preview);
+router.get('/:id/download', c.download);
+router.delete('/:id', manage, c.remove);
+module.exports = router;

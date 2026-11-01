@@ -11,7 +11,7 @@
     "backfill:department-locations": "node src/scripts/backfillDepartmentLocations.js",
     "test:leave-wfh": "cross-env NODE_ENV=test node test-leave-wfh.js",
     "test": "npm run test:unit",
-    "test:unit": "node --test test-auth-security.js test-employee-validation.js test-performance-permissions.js test-recruitment-controller.js test-request-controller.js test-payroll-controller.js test-reports-controller.js test-notification-controller.js test-onboarding-controller.js test-document-controller.js test-documents-config-audit-controller.js test-hr-attendance.js",
+    "test:unit": "node --test test-auth-security.js test-employee-validation.js test-performance-permissions.js test-recruitment-controller.js test-request-controller.js test-payroll-controller.js test-reports-controller.js test-notification-controller.js test-onboarding-controller.js test-document-controller.js test-documents-config-audit-controller.js test-hr-attendance.js test-hr-documents.js",
     "test:integration:notifications": "cross-env NODE_ENV=test node test-notification-reports.integration.js",
     "test:integration:documents-audit-config": "cross-env NODE_ENV=test node --test test-documents-audit-config.integration.js",
     "test:request": "node --test test-request-controller.js",
@@ -30,7 +30,8 @@
     "test:documents": "node --test test-document-controller.js",
     "test:attendance": "node --test test-hr-attendance.js",
     "test:notifications": "node --test test-notification-controller.js",
-    "test:email:smtp": "node test-live-email-smtp.js"
+    "test:email:smtp": "node test-live-email-smtp.js",
+    "test:hr-documents": "node --test test-hr-documents.js"
   },
   "keywords": [
     "nodejs",
@@ -45,6 +46,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -58,7 +60,9 @@
     "multer": "^2.4.0",
     "nodemailer": "^10.0.10",
     "swagger-ui-express": "^5.0.1",
-    "validator": "^13.12.0"
+    "uuid": "^11.1.1",
+    "validator": "^13.12.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
